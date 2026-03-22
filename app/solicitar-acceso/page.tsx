@@ -8,6 +8,7 @@ export default function SolicitarAccesoPage() {
     razonSocial: "",
     nit: "",
     ciudad: "",
+    direccionEmpresa: "",
     contacto: "",
     telefono: "",
     correo: "",
@@ -41,6 +42,7 @@ export default function SolicitarAccesoPage() {
       `- Razón social: ${form.razonSocial}`,
       `- NIT: ${form.nit}`,
       `- Ciudad: ${form.ciudad}`,
+      `- Dirección de la empresa: ${form.direccionEmpresa}`,
       `- Nombre del contacto: ${form.contacto}`,
       `- Teléfono: ${form.telefono}`,
       `- Correo: ${form.correo}`,
@@ -114,6 +116,18 @@ export default function SolicitarAccesoPage() {
                   onChange={onChange("ciudad")}
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-900"
                   placeholder="Ej. Bogotá"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-sm font-medium">
+                  Dirección de la empresa
+                </label>
+                <input
+                  value={form.direccionEmpresa}
+                  onChange={onChange("direccionEmpresa")}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-900"
+                  placeholder="Ej. Calle 123 #45-67"
                 />
               </div>
 
@@ -264,6 +278,7 @@ export default function SolicitarAccesoPage() {
               <ul className="mt-6 space-y-4 text-sm text-slate-300">
                 <li>• Cámara de Comercio vigente</li>
                 <li>• RUT actualizado</li>
+                <li>• Dirección y datos de la empresa</li>
                 <li>• Datos del contacto comercial</li>
                 <li>• Información sobre retenciones aplicables</li>
               </ul>
