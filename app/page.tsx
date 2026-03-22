@@ -31,7 +31,7 @@ export default async function Home() {
                   href="/login"
                   className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  Iniciar sesión
+                  Ingresar como tienda
                 </Link>
 
                 <Link
@@ -80,20 +80,20 @@ export default async function Home() {
 
               {!customer && (
                 <Link
+                  href="/login"
+                  className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Ingresar como tienda
+                </Link>
+              )}
+
+              {!customer && (
+                <Link
                   href="/solicitar-acceso"
                   className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
                 >
                   Solicitar acceso comercial
                 </Link>
-              )}
-
-              {!customer && (
-                <a
-                  href="#retail"
-                  className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                >
-                  Comprar en tiendas aliadas
-                </a>
               )}
             </div>
           </div>
@@ -109,7 +109,7 @@ export default async function Home() {
 
               <ul className="mt-6 space-y-4 text-sm text-slate-600">
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Público general: puede explorar el catálogo y consultar disponibilidad general.
+                  Público general: puede explorar el catálogo y consultar los títulos disponibles.
                 </li>
                 <li className="rounded-xl bg-slate-50 p-4">
                   Tiendas aprobadas: pueden ingresar y acceder a precios y operación B2B.
@@ -124,7 +124,7 @@ export default async function Home() {
       </section>
 
       {!customer && (
-        <section id="retail" className="mx-auto max-w-7xl px-6 pt-12">
+        <section className="mx-auto max-w-7xl px-6 pt-12">
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
               Público general
@@ -134,29 +134,9 @@ export default async function Home() {
             </h3>
             <p className="mt-4 max-w-3xl text-slate-600">
               Este sitio está orientado al canal comercial. Si eres cliente final y te interesa
-              alguno de nuestros juegos, puedes comprarlo a través de nuestras tiendas aliadas
-              y canales autorizados.
+              alguno de nuestros juegos, puedes consultar disponibilidad a través del canal retail
+              y tiendas autorizadas.
             </p>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a
-                href="https://tiendamovitec.com"
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Ir a canal retail
-              </a>
-
-              <a
-                href="https://wa.me/"
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Consultar disponibilidad
-              </a>
-            </div>
           </div>
         </section>
       )}

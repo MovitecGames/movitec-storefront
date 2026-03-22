@@ -1,62 +1,85 @@
 "use client"
 
 import { useState } from "react"
-import { medusa } from "../../lib/medusa"
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [message, setMessage] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
-  const handleRegister = async (e: any) => {
-    e.preventDefault()
+  const handleRegister = async () => {
+    setLoading(true)
+    setError("")
+    setSuccess("")
 
     try {
-    await medusa.store.customer.create({
-       email,
-       password,
-       metadata: {
-    approved: false,
-      },
-        }) 
-      setMessage("Cuenta creada. Ya puedes iniciar sesión.")
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL}/store/customers`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        }
+      )
+
+      if (!res.ok) {
+        throw new Error("Error creando cuenta")
+      }
+
+      setSuccess("Cuenta creada correctamente. Ya puedes iniciar sesión.")
+      setEmail("")
+      setPassword("")
     } catch (err) {
-      console.error(err)
-      setMessage("Error al crear cuenta")
+      setError("Error al crear cuenta")
     }
+
+    setLoading(false)
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-neutral-100">
-      <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md">
+    <main className="min-h-screen flex items-center justify-center bg-neutral-50">
+      <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow">
         <h1 className="text-xl font-bold mb-6 text-center">
-          Solicitar acceso B2B
+          Crear cuenta B2B
         </h1>
 
-        <form onSubmit={handleRegister} className="space-y-4">
-          <input
-            type="email"
-            placeholder="Correo empresarial"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full border p-3 rounded"
-          />
+        <input
+          type="email"
+          placeholder="Correo"
+          className="w-full mb-4 border p-2 rounded"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-          <input
-            type="password"
-            placeholder="Crear contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full border p-3 rounded"
-          />
+        <input
+          type="password"
+          placeholder="Contraseña"
+          className="w-full mb-4 border p-2 rounded"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-          <button className="w-full bg-black text-white p-3 rounded">
-            Solicitar acceso
-          </button>
-        </form>
+        <button
+          onClick={handleRegister}
+          className="w-full bg-black text-white py-2 rounded"
+          disabled={loading}
+        >
+          {loading ? "Creando..." : "Crear cuenta"}
+        </button>
 
-        {message && (
-          <p className="text-center text-sm mt-4">{message}</p>
+        {error && (
+          <p className="text-red-500 mt-4 text-center">{error}</p>
+        )}
+
+        {success && (
+          <p className="text-green-600 mt-4 text-center">{success}</p>
         )}
       </div>
     </main>
