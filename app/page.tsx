@@ -1,11 +1,13 @@
 import Link from "next/link"
 import { medusa } from "../lib/medusa"
+import { getCustomer } from "../lib/customer"
 
 export default async function Home() {
   const { products } = await medusa.store.product.list({
     country_code: "co",
   })
 
+  const customer = await getCustomer()
   const featuredProducts = products?.slice(0, 8) || []
 
   return (
@@ -43,12 +45,13 @@ export default async function Home() {
             </p>
 
             <h2 className="max-w-3xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-              Catálogo mayorista de juegos de mesa para tiendas que quieren vender mejor.
+              Catálogo mayorista de juegos de mesa para tiendas aprobadas por Movitec Games.
             </h2>
 
             <p className="mt-6 max-w-2xl text-lg text-slate-300">
               Accede a un portafolio moderno, disponibilidad centralizada y una experiencia
-              B2B diseñada para distribuidores y comercios especializados.
+              B2B diseñada para comercios especializados. Las condiciones comerciales y
+              precios están disponibles solo para clientes autorizados.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -59,11 +62,18 @@ export default async function Home() {
                 Ver catálogo
               </a>
 
-              <a
-                href="#contacto"
+              <Link
+                href="/login"
                 className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                Solicitar información
+                Iniciar sesión
+              </Link>
+
+              <a
+                href="mailto:ventas@movitecgames.com?subject=Solicitud%20de%20acceso%20comercial%20B2B%20Movitec%20Games&body=Hola%20Movitec%20Games,%0D%0A%0D%0ADeseo%20solicitar%20acceso%20comercial%20B2B.%0D%0A%0D%0ADatos%20de%20mi%20tienda:%0D%0A-%20Raz%C3%B3n%20social:%0D%0A-%20NIT:%0D%0A-%20Ciudad:%0D%0A-%20Nombre%20del%20contacto:%0D%0A-%20Tel%C3%A9fono:%0D%0A-%20Correo:%0D%0A-%20%C2%BFPractica%20retenciones?:%0D%0A%0D%0AAdjuntar%C3%A9%20C%C3%A1mara%20de%20Comercio%20y%20RUT."
+                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Solicitar acceso comercial
               </a>
             </div>
 
@@ -74,7 +84,7 @@ export default async function Home() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-2xl font-bold">B2B</p>
-                <p className="mt-1 text-sm text-slate-300">Enfoque mayorista</p>
+                <p className="mt-1 text-sm text-slate-300">Acceso controlado</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-2xl font-bold">CO</p>
@@ -86,20 +96,20 @@ export default async function Home() {
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
             <div className="rounded-2xl bg-white p-6 text-slate-900">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Pensado para tiendas
+                Acceso comercial
               </p>
               <h3 className="mt-3 text-2xl font-bold tracking-tight">
-                Una vitrina profesional para crecer tu canal
+                Una vitrina profesional para tiendas aprobadas
               </h3>
               <ul className="mt-6 space-y-4 text-sm text-slate-600">
                 <li className="rounded-xl bg-slate-50 p-4">
                   Catálogo centralizado con productos modernos.
                 </li>
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Base preparada para precios por cliente y escalas B2B.
+                  Precios y condiciones visibles solo para clientes autorizados.
                 </li>
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Integración futura con automatización, pedidos y logística.
+                  Proceso comercial con validación previa de documentos.
                 </li>
               </ul>
             </div>
@@ -126,16 +136,16 @@ export default async function Home() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h4 className="text-lg font-semibold">Base B2B escalable</h4>
+            <h4 className="text-lg font-semibold">Acceso controlado</h4>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Preparada para listas de precios, cuentas comerciales y operación por niveles.
+              Solo las tiendas aprobadas por Movitec Games acceden a precios, condiciones y operación comercial.
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h4 className="text-lg font-semibold">Preparada para integrar</h4>
+            <h4 className="text-lg font-semibold">Preparada para crecer</h4>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Lista para conectar automatizaciones, envíos, n8n y servicios externos en etapas siguientes.
+              Base lista para integrar automatización, envíos, aprobación comercial y flujos B2B más robustos.
             </p>
           </div>
         </div>
@@ -208,7 +218,7 @@ export default async function Home() {
                     )}
 
                     <div className="mt-4">
-                      {typeof price === "number" ? (
+                      {customer && typeof price === "number" ? (
                         <p className="text-lg font-bold text-slate-900">
                           {new Intl.NumberFormat("es-CO", {
                             style: "currency",
@@ -218,7 +228,7 @@ export default async function Home() {
                         </p>
                       ) : (
                         <p className="text-sm font-medium text-slate-500">
-                          Precio disponible al ingresar
+                          Precio disponible para clientes autorizados
                         </p>
                       )}
                     </div>
@@ -251,23 +261,26 @@ export default async function Home() {
           <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-center">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-                Siguiente paso
+                Proceso comercial
               </p>
               <h3 className="mt-3 text-3xl font-bold tracking-tight">
-                ¿Tienes una tienda y quieres comprar al por mayor?
+                ¿Quieres comprar al por mayor con Movitec Games?
               </h3>
               <p className="mt-4 max-w-2xl text-slate-600">
-                Estamos construyendo una experiencia B2B enfocada en tiendas. Muy pronto
-                podrás iniciar sesión, ver condiciones comerciales y gestionar pedidos
-                de forma más eficiente.
+                Para habilitar una cuenta comercial, revisamos previamente la
+                documentación de tu tienda, validamos tu perfil y luego activamos
+                el acceso a condiciones y precios B2B.
               </p>
             </div>
 
             <div className="rounded-3xl bg-slate-950 p-8 text-white">
-              <h4 className="text-xl font-semibold">Canal comercial</h4>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                Solicita información comercial, catálogo y condiciones para tiendas.
-              </p>
+              <h4 className="text-xl font-semibold">Qué debes enviar</h4>
+              <ul className="mt-4 space-y-3 text-sm text-slate-300">
+                <li>• Cámara de Comercio</li>
+                <li>• RUT actualizado</li>
+                <li>• Datos de contacto comercial</li>
+                <li>• Información sobre retenciones</li>
+              </ul>
 
               <div id="contacto" className="mt-6 space-y-3 text-sm">
                 <p>
@@ -280,10 +293,10 @@ export default async function Home() {
 
               <div className="mt-6">
                 <a
-                  href="mailto:ventas@movitecgames.com"
+                  href="mailto:ventas@movitecgames.com?subject=Solicitud%20de%20acceso%20comercial%20B2B%20Movitec%20Games&body=Hola%20Movitec%20Games,%0D%0A%0D%0ADeseo%20solicitar%20acceso%20comercial%20B2B.%0D%0A%0D%0ADatos%20de%20mi%20tienda:%0D%0A-%20Raz%C3%B3n%20social:%0D%0A-%20NIT:%0D%0A-%20Ciudad:%0D%0A-%20Nombre%20del%20contacto:%0D%0A-%20Tel%C3%A9fono:%0D%0A-%20Correo:%0D%0A-%20%C2%BFPractica%20retenciones?:%0D%0A%0D%0AAdjuntar%C3%A9%20C%C3%A1mara%20de%20Comercio%20y%20RUT."
                   className="inline-flex rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-200"
                 >
-                  Escribir ahora
+                  Solicitar acceso comercial
                 </a>
               </div>
             </div>
