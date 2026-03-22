@@ -7,8 +7,9 @@ export default async function Home() {
     country_code: "co",
   })
 
-  const customer = await getCustomer()
   const featuredProducts = products?.slice(0, 8) || []
+  const customer = await getCustomer()
+  const isApproved = customer?.metadata?.approved === true
 
   return (
     <main className="min-h-screen bg-neutral-50 text-slate-900">
@@ -23,17 +24,32 @@ export default async function Home() {
             </h1>
           </div>
 
-          <nav className="hidden gap-6 text-sm font-medium text-slate-600 md:flex">
-            <a href="#catalogo" className="hover:text-slate-900">
-              Catálogo
-            </a>
-            <a href="#beneficios" className="hover:text-slate-900">
-              Beneficios
-            </a>
-            <a href="#contacto" className="hover:text-slate-900">
-              Contacto
-            </a>
-          </nav>
+          <div className="flex items-center gap-3">
+            {!customer ? (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Iniciar sesión
+                </Link>
+
+                <Link
+                  href="/solicitar-acceso"
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Solicitar acceso comercial
+                </Link>
+              </>
+            ) : (
+              <div className="text-right">
+                <p className="text-sm font-medium">{customer.email}</p>
+                <p className="text-xs text-slate-500">
+                  {isApproved ? "Cuenta aprobada" : "Cuenta en revisión"}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -41,17 +57,17 @@ export default async function Home() {
         <div className="mx-auto grid max-w-7xl gap-10 px-6 py-20 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-amber-300">
-              Plataforma para tiendas
+              Juegos modernos · Canal retail y comercial
             </p>
 
             <h2 className="max-w-3xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-              Catálogo mayorista de juegos de mesa para tiendas aprobadas por Movitec Games.
+              Descubre juegos de mesa modernos y accede a nuestro canal comercial para tiendas.
             </h2>
 
             <p className="mt-6 max-w-2xl text-lg text-slate-300">
-              Accede a un portafolio moderno, disponibilidad centralizada y una experiencia
-              B2B diseñada para comercios especializados. Las condiciones comerciales y
-              precios están disponibles solo para clientes autorizados.
+              Movitec Games conecta el catálogo con el mercado. Los visitantes pueden explorar
+              los títulos disponibles, y las tiendas aprobadas acceden a condiciones comerciales,
+              precios y operación B2B.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -59,57 +75,47 @@ export default async function Home() {
                 href="#catalogo"
                 className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-200"
               >
-                Ver catálogo
+                Ver juegos
               </a>
 
-              <Link
-                href="/login"
-                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Iniciar sesión
-              </Link>
+              {!customer && (
+                <Link
+                  href="/solicitar-acceso"
+                  className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Solicitar acceso comercial
+                </Link>
+              )}
 
-              <Link
-                href="/solicitar-acceso"
-                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Solicitar acceso comercial
-              </Link>
-            </div>
-
-            <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-2xl font-bold">{products?.length || 0}+</p>
-                <p className="mt-1 text-sm text-slate-300">Productos visibles</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-2xl font-bold">B2B</p>
-                <p className="mt-1 text-sm text-slate-300">Acceso controlado</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-2xl font-bold">CO</p>
-                <p className="mt-1 text-sm text-slate-300">Operación Colombia</p>
-              </div>
+              {!customer && (
+                <a
+                  href="#retail"
+                  className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Comprar en tiendas aliadas
+                </a>
+              )}
             </div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
             <div className="rounded-2xl bg-white p-6 text-slate-900">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Acceso comercial
+                Dos vías de acceso
               </p>
               <h3 className="mt-3 text-2xl font-bold tracking-tight">
-                Una vitrina profesional para tiendas aprobadas
+                Catálogo abierto, condiciones comerciales restringidas
               </h3>
+
               <ul className="mt-6 space-y-4 text-sm text-slate-600">
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Catálogo centralizado con productos modernos.
+                  Público general: puede explorar el catálogo y consultar disponibilidad general.
                 </li>
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Precios y condiciones visibles solo para clientes autorizados.
+                  Tiendas aprobadas: pueden ingresar y acceder a precios y operación B2B.
                 </li>
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Proceso comercial con validación previa de documentos.
+                  La habilitación comercial requiere revisión documental previa.
                 </li>
               </ul>
             </div>
@@ -117,48 +123,69 @@ export default async function Home() {
         </div>
       </section>
 
-      <section id="beneficios" className="mx-auto max-w-7xl px-6 py-16">
-        <div className="mb-10 max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Por qué Movitec Games
-          </p>
-          <h3 className="mt-3 text-3xl font-bold tracking-tight">
-            Más que vender juegos: construir una oferta sólida para tiendas.
-          </h3>
-        </div>
+      {!customer && (
+        <section id="retail" className="mx-auto max-w-7xl px-6 pt-12">
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Público general
+            </p>
+            <h3 className="mt-3 text-2xl font-bold tracking-tight">
+              ¿Quieres comprar como consumidor final?
+            </h3>
+            <p className="mt-4 max-w-3xl text-slate-600">
+              Este sitio está orientado al canal comercial. Si eres cliente final y te interesa
+              alguno de nuestros juegos, puedes comprarlo a través de nuestras tiendas aliadas
+              y canales autorizados.
+            </p>
 
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h4 className="text-lg font-semibold">Catálogo seleccionado</h4>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Una base de productos pensada para el retail especializado y el crecimiento del hobby.
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                href="https://tiendamovitec.com"
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Ir a canal retail
+              </a>
+
+              <a
+                href="https://wa.me/"
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Consultar disponibilidad
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {customer && !isApproved && (
+        <section className="mx-auto max-w-7xl px-6 pt-12">
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">
+              Cuenta en revisión
+            </p>
+            <h3 className="mt-3 text-2xl font-bold tracking-tight text-amber-900">
+              Tu solicitud está siendo validada
+            </h3>
+            <p className="mt-4 max-w-3xl text-amber-900/80">
+              Ya recibimos tu información. Una vez aprobemos tu perfil comercial, se habilitará
+              la visualización de precios y condiciones B2B dentro de la plataforma.
             </p>
           </div>
+        </section>
+      )}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h4 className="text-lg font-semibold">Acceso controlado</h4>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Solo las tiendas aprobadas por Movitec Games acceden a precios, condiciones y operación comercial.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h4 className="text-lg font-semibold">Preparada para crecer</h4>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Base lista para integrar automatización, envíos, aprobación comercial y flujos B2B más robustos.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="catalogo" className="mx-auto max-w-7xl px-6 pb-16">
+      <section id="catalogo" className="mx-auto max-w-7xl px-6 py-16">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
               Catálogo
             </p>
             <h3 className="mt-2 text-3xl font-bold tracking-tight">
-              Productos destacados
+              Juegos destacados
             </h3>
           </div>
 
@@ -213,12 +240,12 @@ export default async function Home() {
                       </p>
                     ) : (
                       <p className="mt-2 text-sm text-slate-400">
-                        Producto disponible en catálogo B2B.
+                        Producto disponible en catálogo.
                       </p>
                     )}
 
                     <div className="mt-4">
-                      {customer && typeof price === "number" ? (
+                      {customer && isApproved && typeof price === "number" ? (
                         <p className="text-lg font-bold text-slate-900">
                           {new Intl.NumberFormat("es-CO", {
                             style: "currency",
@@ -241,12 +268,32 @@ export default async function Home() {
                         Ver producto
                       </Link>
 
-                      <button
-                        disabled
-                        className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
-                      >
-                        B2B
-                      </button>
+                      {!customer && (
+                        <Link
+                          href="/solicitar-acceso"
+                          className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          B2B
+                        </Link>
+                      )}
+
+                      {customer && !isApproved && (
+                        <button
+                          disabled
+                          className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
+                        >
+                          En revisión
+                        </button>
+                      )}
+
+                      {customer && isApproved && (
+                        <button
+                          disabled
+                          className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
+                        >
+                          Aprobado
+                        </button>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -264,7 +311,7 @@ export default async function Home() {
                 Proceso comercial
               </p>
               <h3 className="mt-3 text-3xl font-bold tracking-tight">
-                ¿Quieres comprar al por mayor con Movitec Games?
+                ¿Tienes una tienda y quieres comprar al por mayor?
               </h3>
               <p className="mt-4 max-w-2xl text-slate-600">
                 Para habilitar una cuenta comercial, revisamos previamente la

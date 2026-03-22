@@ -12,11 +12,13 @@ export default function RegisterPage() {
     e.preventDefault()
 
     try {
-      await medusa.auth.register("customer", "emailpass", {
-        email,
-        password,
-      })
-
+    await medusa.store.customer.create({
+       email,
+       password,
+       metadata: {
+    approved: false,
+      },
+        }) 
       setMessage("Cuenta creada. Ya puedes iniciar sesión.")
     } catch (err) {
       console.error(err)
