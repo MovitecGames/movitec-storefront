@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { medusa } from "../../../lib/medusa"
+import { getCustomer } from "../../../lib/customer"
 
 type PageProps = {
   params: Promise<{
@@ -18,7 +19,11 @@ export default async function ProductPage({ params }: PageProps) {
 
   const product = products?.[0]
 
-  if (!product) return notFound()
+  if (!product) {
+    notFound()
+  }
+
+  const customer = await getCustomer()
 
   const image = product.thumbnail || product.images?.[0]?.url || ""
   const price = product.variants?.[0]?.calculated_price?.calculated_amount
@@ -36,8 +41,6 @@ export default async function ProductPage({ params }: PageProps) {
         </Link>
 
         <div className="grid gap-10 lg:grid-cols-2">
-          
-          {/* Imagen */}
           <div className="overflow-hidden rounded-3xl bg-slate-100">
             {image ? (
               <img
@@ -52,7 +55,6 @@ export default async function ProductPage({ params }: PageProps) {
             )}
           </div>
 
-          {/* Info */}
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
               Producto
@@ -62,14 +64,14 @@ export default async function ProductPage({ params }: PageProps) {
               {product.title}
             </h1>
 
-            {product.subtitle && (
+            {product.subtitle ? (
               <p className="mt-3 text-lg text-slate-600">
                 {product.subtitle}
               </p>
-            )}
+            ) : null}
 
             <div className="mt-6">
-              {typeof price === "number" ? (
+              {customer && typeof price === "number" ? (
                 <p className="text-3xl font-bold">
                   {new Intl.NumberFormat("es-CO", {
                     style: "currency",
@@ -78,30 +80,48 @@ export default async function ProductPage({ params }: PageProps) {
                   }).format(price)}
                 </p>
               ) : (
-                <p className="text-base text-slate-500">
-                  Precio disponible al iniciar sesión
+                <p className="text-base font-medium text-slate-500">
+                  Precio disponible para clientes autorizados
                 </p>
               )}
             </div>
 
-            {product.description && (
+            {product.description ? (
               <div className="mt-8">
                 <h2 className="text-lg font-semibold">Descripción</h2>
                 <p className="mt-2 whitespace-pre-line text-slate-600">
                   {product.description}
                 </p>
               </div>
-            )}
+            ) : null}
 
-            {/* CTA B2B */}
-            <div className="mt-10 space-y-3">
-              <button className="w-full rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800">
-                Solicitar cotización
-              </button>
+            <div className="mt-10 rounded-2xl border border-slate-200 bg-white p-6">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Acceso comercial
+              </p>
+              <h2 className="mt-3 text-xl font-bold tracking-tight">
+                Condiciones visibles solo para tiendas aprobadas
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Para consultar precios, condiciones comerciales y disponibilidad
+                bajo perfil B2B, debes tener una cuenta aprobada por Movitec Games.
+              </p>
 
-              <button className="w-full rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                Contactar asesor
-              </button>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href="/login"
+                  className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Iniciar sesión
+                </Link>
+
+                <Link
+                  href="/solicitar-acceso"
+                  className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Solicitar acceso comercial
+                </Link>
+              </div>
             </div>
 
             <div className="mt-6 text-xs text-slate-500">

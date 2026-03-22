@@ -69,12 +69,12 @@ export default async function Home() {
                 Iniciar sesión
               </Link>
 
-              <a
-                href="mailto:ventas@movitecgames.com?subject=Solicitud%20de%20acceso%20comercial%20B2B%20Movitec%20Games&body=Hola%20Movitec%20Games,%0D%0A%0D%0ADeseo%20solicitar%20acceso%20comercial%20B2B.%0D%0A%0D%0ADatos%20de%20mi%20tienda:%0D%0A-%20Raz%C3%B3n%20social:%0D%0A-%20NIT:%0D%0A-%20Ciudad:%0D%0A-%20Nombre%20del%20contacto:%0D%0A-%20Tel%C3%A9fono:%0D%0A-%20Correo:%0D%0A-%20%C2%BFPractica%20retenciones?:%0D%0A%0D%0AAdjuntar%C3%A9%20C%C3%A1mara%20de%20Comercio%20y%20RUT."
+              <Link
+                href="/solicitar-acceso"
                 className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 Solicitar acceso comercial
-              </a>
+              </Link>
             </div>
 
             <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -278,7 +278,7 @@ export default async function Home() {
               <ul className="mt-4 space-y-3 text-sm text-slate-300">
                 <li>• Cámara de Comercio</li>
                 <li>• RUT actualizado</li>
-                <li>• Datos de contacto comercial</li>
+                <li>• Datos del contacto comercial</li>
                 <li>• Información sobre retenciones</li>
               </ul>
 
@@ -292,12 +292,12 @@ export default async function Home() {
               </div>
 
               <div className="mt-6">
-                <a
-                  href="mailto:ventas@movitecgames.com?subject=Solicitud%20de%20acceso%20comercial%20B2B%20Movitec%20Games&body=Hola%20Movitec%20Games,%0D%0A%0D%0ADeseo%20solicitar%20acceso%20comercial%20B2B.%0D%0A%0D%0ADatos%20de%20mi%20tienda:%0D%0A-%20Raz%C3%B3n%20social:%0D%0A-%20NIT:%0D%0A-%20Ciudad:%0D%0A-%20Nombre%20del%20contacto:%0D%0A-%20Tel%C3%A9fono:%0D%0A-%20Correo:%0D%0A-%20%C2%BFPractica%20retenciones?:%0D%0A%0D%0AAdjuntar%C3%A9%20C%C3%A1mara%20de%20Comercio%20y%20RUT."
+                <Link
+                  href="/solicitar-acceso"
                   className="inline-flex rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-200"
                 >
                   Solicitar acceso comercial
-                </a>
+                </Link>
               </div>
             </div>
           </div>
