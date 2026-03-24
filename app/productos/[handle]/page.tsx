@@ -156,8 +156,16 @@ export default function ProductPage({
 
       if (!cartId) {
         const created = await createCart()
-        cartId = created.cart.id
-        setStoredCartId(cartId)
+        const newCartId = created?.cart?.id
+
+        if (newCartId) {
+          setStoredCartId(newCartId)
+          cartId = newCartId
+        } else {
+          alert("No fue posible crear el carrito.")
+          return
+        }
+
         cart = created.cart as CartResponse
       } else {
         try {
@@ -165,8 +173,16 @@ export default function ProductPage({
           cart = retrieved.cart as CartResponse
         } catch {
           const created = await createCart()
-          cartId = created.cart.id
-          setStoredCartId(cartId)
+          const newCartId = created?.cart?.id
+
+          if (newCartId) {
+            setStoredCartId(newCartId)
+            cartId = newCartId
+          } else {
+            alert("No fue posible crear el carrito.")
+            return
+          }
+
           cart = created.cart as CartResponse
         }
       }
@@ -175,8 +191,13 @@ export default function ProductPage({
         await transferCart(cartId).catch(() => null)
       }
 
+      if (!cartId) {
+        alert("No fue posible identificar un carrito válido.")
+        return
+      }
+
       const { cart: updatedCart } = await createLineItem(
-        cartId!,
+        cartId,
         variant.id,
         quantity
       )
