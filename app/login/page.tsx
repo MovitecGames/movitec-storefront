@@ -10,24 +10,29 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
-    setLoading(true)
+
+    if (!email.trim() || !password.trim()) {
+      setError("Debes ingresar correo y contraseña.")
+      return
+    }
 
     try {
+      setLoading(true)
+
       await medusa.auth.login("customer", "emailpass", {
-        email,
+        email: email.trim(),
         password,
       })
-
-      // Validación inmediata de que ya puede leerse el customer desde browser
-      await medusa.store.customer.retrieve()
 
       window.location.href = "/"
     } catch (err) {
       console.error(err)
-      setError("No fue posible iniciar sesión. Verifica tus credenciales o solicita acceso comercial.")
+      setError(
+        "No fue posible iniciar sesión. Verifica tus credenciales o solicita acceso comercial."
+      )
     } finally {
       setLoading(false)
     }
@@ -41,7 +46,8 @@ export default function LoginPage() {
         </h1>
 
         <p className="mb-6 text-center text-sm text-slate-600">
-          Si ya eres un usuario aprobado, ingresa tus credenciales para acceder a la plataforma B2B.
+          Si ya eres un usuario aprobado, ingresa tus credenciales para acceder
+          a la plataforma B2B.
         </p>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -51,6 +57,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded border p-3"
+            autoComplete="email"
           />
 
           <input
@@ -59,9 +66,11 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded border p-3"
+            autoComplete="current-password"
           />
 
           <button
+            type="submit"
             disabled={loading}
             className="w-full rounded bg-black p-3 text-white disabled:opacity-60"
           >
@@ -74,7 +83,8 @@ export default function LoginPage() {
         )}
 
         <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-          Si no tienes una cuenta habilitada, debes solicitar el acceso comercial.
+          Si no tienes una cuenta habilitada, debes solicitar el acceso
+          comercial.
         </div>
 
         <div className="mt-4 text-center">
