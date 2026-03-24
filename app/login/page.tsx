@@ -8,10 +8,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setLoading(true)
 
     try {
       await medusa.auth.login("customer", "emailpass", {
@@ -19,10 +21,15 @@ export default function LoginPage() {
         password,
       })
 
+      // Validación inmediata de que ya puede leerse el customer desde browser
+      await medusa.store.customer.retrieve()
+
       window.location.href = "/"
     } catch (err) {
       console.error(err)
       setError("No fue posible iniciar sesión. Verifica tus credenciales o solicita acceso comercial.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -54,8 +61,11 @@ export default function LoginPage() {
             className="w-full rounded border p-3"
           />
 
-          <button className="w-full rounded bg-black p-3 text-white">
-            Ingresar
+          <button
+            disabled={loading}
+            className="w-full rounded bg-black p-3 text-white disabled:opacity-60"
+          >
+            {loading ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
 

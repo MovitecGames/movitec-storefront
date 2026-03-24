@@ -1,15 +1,77 @@
+"use client"
+
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import { medusa } from "../lib/medusa"
-import { getCustomer } from "../lib/customer"
 
-export default async function Home() {
-  const { products } = await medusa.store.product.list({
-    country_code: "co",
-  })
+type ProductItem = {
+  id: string
+  title: string
+  subtitle?: string | null
+  handle?: string | null
+  thumbnail?: string | null
+  images?: { url?: string | null }[]
+  variants?: {
+    calculated_price?: {
+      calculated_amount?: number
+      currency_code?: string
+    }
+  }[]
+}
 
-  const featuredProducts = products?.slice(0, 8) || []
-  const customer = await getCustomer()
+type CustomerItem = {
+  email?: string
+  metadata?: {
+    approved?: boolean
+  } | null
+}
+
+export default function Home() {
+  const [products, setProducts] = useState<ProductItem[]>([])
+  const [customer, setCustomer] = useState<CustomerItem | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const productsPromise = medusa.store.product.list({
+          country_code: "co",
+          fields: "*variants.calculated_price,+images",
+        })
+
+        const customerPromise = medusa.store.customer
+          .retrieve()
+          .then(({ customer }) => customer)
+          .catch(() => null)
+
+        const [{ products }, currentCustomer] = await Promise.all([
+          productsPromise,
+          customerPromise,
+        ])
+
+        setProducts(products || [])
+        setCustomer(currentCustomer)
+      } catch (error) {
+        console.error(error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [])
+
   const isApproved = customer?.metadata?.approved === true
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-neutral-50 text-slate-900">
+        <div className="mx-auto max-w-7xl px-6 py-20">
+          <p className="text-sm text-slate-500">Cargando plataforma…</p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-neutral-50 text-slate-900">
@@ -19,12 +81,17 @@ export default async function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
               Distribución B2B
             </p>
-            <h1 className="text-xl font-bold tracking-tight">
-              Movitec Games
-            </h1>
+            <h1 className="text-xl font-bold tracking-tight">Movitec Games</h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/carrito"
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              🛒 Carrito
+            </Link>
+
             {!customer ? (
               <>
                 <Link
@@ -123,24 +190,6 @@ export default async function Home() {
         </div>
       </section>
 
-      {!customer && (
-        <section className="mx-auto max-w-7xl px-6 pt-12">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Público general
-            </p>
-            <h3 className="mt-3 text-2xl font-bold tracking-tight">
-              ¿Quieres comprar como consumidor final?
-            </h3>
-            <p className="mt-4 max-w-3xl text-slate-600">
-              Este sitio está orientado al canal comercial. Si eres cliente final y te interesa
-              alguno de nuestros juegos, puedes consultar disponibilidad a través del canal retail
-              y tiendas autorizadas.
-            </p>
-          </div>
-        </section>
-      )}
-
       {customer && !isApproved && (
         <section className="mx-auto max-w-7xl px-6 pt-12">
           <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8">
@@ -164,17 +213,13 @@ export default async function Home() {
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
               Catálogo
             </p>
-            <h3 className="mt-2 text-3xl font-bold tracking-tight">
-              Juegos destacados
-            </h3>
+            <h3 className="mt-2 text-3xl font-bold tracking-tight">Juegos destacados</h3>
           </div>
 
-          <div className="text-sm text-slate-500">
-            {featuredProducts.length} productos destacados
-          </div>
+          <div className="text-sm text-slate-500">{products.length} productos</div>
         </div>
 
-        {!featuredProducts.length ? (
+        {!products.length ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
             <p className="text-lg font-semibold">No hay productos disponibles todavía.</p>
             <p className="mt-2 text-slate-500">
@@ -183,12 +228,13 @@ export default async function Home() {
           </div>
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {featuredProducts.map((product: any) => {
-              const image = product.thumbnail || product.images?.[0]?.url || ""
+            {products.map((product) => {
+              const image = product.thumbnail || product.images?.[0]?.url || null
               const price =
                 product.variants?.[0]?.calculated_price?.calculated_amount
               const currency =
-                product.variants?.[0]?.calculated_price?.currency_code?.toUpperCase()
+                product.variants?.[0]?.calculated_price?.currency_code?.toUpperCase() ||
+                "COP"
 
               return (
                 <article
@@ -210,14 +256,12 @@ export default async function Home() {
                   </div>
 
                   <div className="p-5">
-                    <h4 className="line-clamp-2 min-h-[3.4rem] text-base font-semibold">
+                    <h4 className="min-h-[3.4rem] text-base font-semibold">
                       {product.title}
                     </h4>
 
                     {product.subtitle ? (
-                      <p className="mt-2 line-clamp-2 text-sm text-slate-500">
-                        {product.subtitle}
-                      </p>
+                      <p className="mt-2 text-sm text-slate-500">{product.subtitle}</p>
                     ) : (
                       <p className="mt-2 text-sm text-slate-400">
                         Producto disponible en catálogo.
@@ -229,7 +273,7 @@ export default async function Home() {
                         <p className="text-lg font-bold text-slate-900">
                           {new Intl.NumberFormat("es-CO", {
                             style: "currency",
-                            currency: currency || "COP",
+                            currency,
                             maximumFractionDigits: 0,
                           }).format(price)}
                         </p>
@@ -248,31 +292,16 @@ export default async function Home() {
                         Ver producto
                       </Link>
 
-                      {!customer && (
-                        <Link
-                          href="/solicitar-acceso"
-                          className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          B2B
-                        </Link>
+                      {customer && isApproved && (
+                        <span className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500">
+                          Aprobado
+                        </span>
                       )}
 
                       {customer && !isApproved && (
-                        <button
-                          disabled
-                          className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
-                        >
+                        <span className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500">
                           En revisión
-                        </button>
-                      )}
-
-                      {customer && isApproved && (
-                        <button
-                          disabled
-                          className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
-                        >
-                          Aprobado
-                        </button>
+                        </span>
                       )}
                     </div>
                   </div>
@@ -282,58 +311,6 @@ export default async function Home() {
           </div>
         )}
       </section>
-
-      <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-16">
-          <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-center">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-                Proceso comercial
-              </p>
-              <h3 className="mt-3 text-3xl font-bold tracking-tight">
-                ¿Tienes una tienda y quieres comprar al por mayor?
-              </h3>
-              <p className="mt-4 max-w-2xl text-slate-600">
-                Para habilitar una cuenta comercial, revisamos previamente la
-                documentación de tu tienda, validamos tu perfil y luego activamos
-                el acceso a condiciones y precios B2B.
-              </p>
-            </div>
-
-            <div className="rounded-3xl bg-slate-950 p-8 text-white">
-              <h4 className="text-xl font-semibold">Qué debes enviar</h4>
-              <ul className="mt-4 space-y-3 text-sm text-slate-300">
-                <li>• Cámara de Comercio</li>
-                <li>• RUT actualizado</li>
-                <li>• Datos del contacto comercial</li>
-                <li>• Información sobre retenciones</li>
-              </ul>
-
-              <div id="contacto" className="mt-6 space-y-3 text-sm">
-                <p>
-                  <span className="font-semibold">Correo:</span> ventas@movitecgames.com
-                </p>
-                <p>
-                  <span className="font-semibold">Canal:</span> Atención comercial B2B
-                </p>
-              </div>
-
-              <div className="mt-6">
-                <Link
-                  href="/solicitar-acceso"
-                  className="inline-flex rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-200"
-                >
-                  Solicitar acceso comercial
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <footer className="mx-auto max-w-7xl px-6 py-8 text-sm text-slate-500">
-        © {new Date().getFullYear()} Movitec Games. Plataforma B2B en construcción.
-      </footer>
     </main>
   )
 }
