@@ -8,7 +8,13 @@ export async function createCart() {
 }
 
 export async function retrieveCart(cartId: string) {
-  return medusa.store.cart.retrieve(cartId)
+  return medusa.store.cart.retrieve(
+    cartId,
+    {
+      fields:
+        "*items,+items.metadata,+items.variant,+items.variant.metadata",
+    } as any
+  )
 }
 
 export async function transferCart(cartId: string) {
@@ -28,15 +34,38 @@ export async function updateCartAddresses(
 
 export async function createLineItem(
   cartId: string,
+  variantId: string,
+  quantity: number
+): Promise<any>
+export async function createLineItem(
+  cartId: string,
   payload: {
     variant_id: string
     quantity: number
     metadata?: Record<string, any>
   }
+): Promise<any>
+export async function createLineItem(
+  cartId: string,
+  payloadOrVariantId:
+    | string
+    | {
+        variant_id: string
+        quantity: number
+        metadata?: Record<string, any>
+      },
+  quantityArg?: number
 ) {
-  await medusa.store.cart.createLineItem(cartId, payload)
+  if (typeof payloadOrVariantId === "string") {
+    await medusa.store.cart.createLineItem(cartId, {
+      variant_id: payloadOrVariantId,
+      quantity: quantityArg || 1,
+    })
+  } else {
+    await medusa.store.cart.createLineItem(cartId, payloadOrVariantId)
+  }
 
-  return medusa.store.cart.retrieve(cartId)
+  return retrieveCart(cartId)
 }
 
 export async function updateLineItem(
@@ -44,11 +73,15 @@ export async function updateLineItem(
   lineItemId: string,
   quantity: number
 ) {
-  return medusa.store.cart.updateLineItem(cartId, lineItemId, {
+  await medusa.store.cart.updateLineItem(cartId, lineItemId, {
     quantity,
   })
+
+  return retrieveCart(cartId)
 }
 
 export async function deleteLineItem(cartId: string, lineItemId: string) {
-  return medusa.store.cart.deleteLineItem(cartId, lineItemId)
+  await medusa.store.cart.deleteLineItem(cartId, lineItemId)
+
+  return retrieveCart(cartId)
 }
