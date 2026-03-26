@@ -1,7 +1,3 @@
-(Sin asunto)
-Movitec Games
-
-​Movitec Games​
 export function buildNationalShippingPayload(data: {
   destinationCity: string
   destinationState: string
@@ -13,7 +9,7 @@ export function buildNationalShippingPayload(data: {
     destinationState: data.destinationState,
     destinationPostalCode: data.destinationPostalCode,
     weightKg: data.weightKg,
-    declaredValue: 0, // luego lo conectamos con el carrito real
+    declaredValue: 0,
   }
 }
 
