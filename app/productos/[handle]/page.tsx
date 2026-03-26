@@ -21,6 +21,13 @@ type ProductVariant = {
     calculated_amount?: number
     currency_code?: string
   }
+  metadata?: {
+    weight_g?: string | number
+    width_cm?: string | number
+    height_cm?: string | number
+    length_cm?: string | number
+    [key: string]: any
+  } | null
 }
 
 type ProductItem = {
@@ -69,7 +76,7 @@ export default function ProductPage({
         const productPromise = medusa.store.product.list({
           handle: resolvedParams.handle,
           country_code: "co",
-          fields: "*variants.calculated_price,+images",
+          fields: "*variants.calculated_price,+images,+variants.metadata",
         })
 
         const customerPromise = medusa.store.customer
@@ -196,11 +203,16 @@ export default function ProductPage({
         return
       }
 
-      const { cart: updatedCart } = await createLineItem(
-        cartId,
-        variant.id,
-        quantity
-      )
+      const { cart: updatedCart } = await createLineItem(cartId, {
+        variant_id: variant.id,
+        quantity,
+        metadata: {
+          weight_g: variant.metadata?.weight_g ?? "",
+          width_cm: variant.metadata?.width_cm ?? "",
+          height_cm: variant.metadata?.height_cm ?? "",
+          length_cm: variant.metadata?.length_cm ?? "",
+        },
+      })
 
       const count =
         updatedCart.items?.reduce(
