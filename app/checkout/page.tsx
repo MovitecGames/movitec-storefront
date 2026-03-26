@@ -1,5 +1,3 @@
-"use client"
-
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { medusa } from "../../lib/medusa"
@@ -48,12 +46,16 @@ type ShippingOption = {
   amount?: number
 }
 
+type DeliveryMode = "pickup" | "bogota" | "nacional"
+type PaymentMethod = "breb" | "wompi"
+
 export default function CheckoutPage() {
   const [cart, setCart] = useState<CartType | null>(null)
   const [customer, setCustomer] = useState<CustomerItem | null>(null)
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([])
   const [selectedShippingOption, setSelectedShippingOption] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<"breb" | "wompi">("breb")
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("breb")
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("pickup")
   const [loading, setLoading] = useState(true)
   const [savingAddress, setSavingAddress] = useState(false)
   const [savingShipping, setSavingShipping] = useState(false)
@@ -71,7 +73,6 @@ export default function CheckoutPage() {
     province: "Bogotá D.C.",
     postal_code: "",
     country_code: "co",
-    shipping_scope: "bogota",
   })
 
   const loadCheckoutData = async () => {
@@ -140,9 +141,10 @@ export default function CheckoutPage() {
   const totalWithCommercialTerms = totalPvp - commercialValue
 
   const selectedShippingCost = useMemo(() => {
+    if (deliveryMode === "pickup") return 0
     const found = shippingOptions.find((opt) => opt.id === selectedShippingOption)
     return found?.amount || 0
-  }, [shippingOptions, selectedShippingOption])
+  }, [shippingOptions, selectedShippingOption, deliveryMode])
 
   const totalBeforePayment = totalWithCommercialTerms + selectedShippingCost
   const wompiFee = paymentMethod === "wompi" ? totalBeforePayment * 0.03 : 0
@@ -155,6 +157,27 @@ export default function CheckoutPage() {
     setForm((prev) => ({ ...prev, [name]: value }))
   }
 
+  const filterShippingOptions = (
+    options: ShippingOption[],
+    mode: DeliveryMode
+  ) => {
+    if (mode === "bogota") {
+      return options.filter((opt) => {
+        const name = (opt.name || "").toLowerCase()
+        return name.includes("bog") || name.includes("bogotá")
+      })
+    }
+
+    if (mode === "nacional") {
+      return options.filter((opt) => {
+        const name = (opt.name || "").toLowerCase()
+        return !name.includes("bog") && !name.includes("bogotá")
+      })
+    }
+
+    return []
+  }
+
   const handleSaveAddress = async () => {
     try {
       const cartId = getStoredCartId()
@@ -163,18 +186,21 @@ export default function CheckoutPage() {
         return
       }
 
-      if (
-        !form.first_name ||
-        !form.last_name ||
-        !form.email ||
-        !form.address_1 ||
-        !form.city
-      ) {
-        alert("Completa los campos obligatorios de dirección.")
+      if (!form.first_name || !form.last_name || !form.email) {
+        alert("Completa al menos nombre, apellido y correo.")
         return
       }
 
+      if (deliveryMode !== "pickup") {
+        if (!form.address_1 || !form.city) {
+          alert("Completa la dirección y ciudad para el envío.")
+          return
+        }
+      }
+
       setSavingAddress(true)
+      setSelectedShippingOption("")
+      setShippingOptions([])
 
       await updateCartAddresses(cartId, {
         email: form.email,
@@ -182,8 +208,8 @@ export default function CheckoutPage() {
           first_name: form.first_name,
           last_name: form.last_name,
           company: form.company,
-          address_1: form.address_1,
-          city: form.city,
+          address_1: deliveryMode === "pickup" ? "Recoge en bodega" : form.address_1,
+          city: deliveryMode === "pickup" ? "Bogotá" : form.city,
           province: form.province,
           postal_code: form.postal_code,
           country_code: form.country_code,
@@ -193,8 +219,8 @@ export default function CheckoutPage() {
           first_name: form.first_name,
           last_name: form.last_name,
           company: form.company,
-          address_1: form.address_1,
-          city: form.city,
+          address_1: deliveryMode === "pickup" ? "Recoge en bodega" : form.address_1,
+          city: deliveryMode === "pickup" ? "Bogotá" : form.city,
           province: form.province,
           postal_code: form.postal_code,
           country_code: form.country_code,
@@ -202,26 +228,23 @@ export default function CheckoutPage() {
         },
       })
 
+      if (deliveryMode === "pickup") {
+        setAddressSaved(true)
+        alert("Datos guardados. La modalidad de recogida no requiere envío.")
+        return
+      }
+
       const cartOptionsResponse = await listCartShippingOptions(cartId)
-      const rawOptions =
-        (cartOptionsResponse as any)?.shipping_options ||
-        (cartOptionsResponse as any)?.shipping_options ||
-        []
+      const rawOptions = (cartOptionsResponse as any)?.shipping_options || []
 
-      const normalized = (rawOptions || []).filter((opt: ShippingOption) => {
-        const name = (opt.name || "").toLowerCase()
-        if (form.shipping_scope === "bogota") {
-          return name.includes("bog") || name.includes("bogotá")
-        }
-        return !name.includes("bog") && !name.includes("bogotá")
-      })
-
-      setShippingOptions(normalized)
+      const filtered = filterShippingOptions(rawOptions, deliveryMode)
+      setShippingOptions(filtered)
       setAddressSaved(true)
+
       alert("Dirección guardada correctamente.")
     } catch (error) {
       console.error(error)
-      alert("No fue posible guardar la dirección.")
+      alert("No fue posible guardar la información.")
     } finally {
       setSavingAddress(false)
     }
@@ -229,6 +252,11 @@ export default function CheckoutPage() {
 
   const handleSaveShipping = async () => {
     try {
+      if (deliveryMode === "pickup") {
+        alert("La recogida en bodega no requiere guardar método de envío.")
+        return
+      }
+
       const cartId = getStoredCartId()
       if (!cartId) {
         alert("No se encontró un carrito activo.")
@@ -302,10 +330,10 @@ export default function CheckoutPage() {
             Checkout B2B
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">
-            Dirección, envío y pago
+            Dirección, entrega y pago
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Guarda la dirección del pedido, selecciona el alcance del envío y
+            Guarda los datos del pedido, selecciona la modalidad de entrega y
             define el método de pago para continuar con el cierre de la orden.
           </p>
         </div>
@@ -317,7 +345,90 @@ export default function CheckoutPage() {
                 Paso 1
               </p>
               <h2 className="mt-2 text-xl font-bold tracking-tight">
-                Datos de entrega
+                Modalidad de entrega
+              </h2>
+
+              <div className="mt-4 space-y-3">
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    checked={deliveryMode === "pickup"}
+                    onChange={() => {
+                      setDeliveryMode("pickup")
+                      setSelectedShippingOption("")
+                      setShippingOptions([])
+                      setAddressSaved(false)
+                    }}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      Recoger en bodega
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Sin costo de envío. La entrega se coordina una vez se
+                      verifique el pago.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    checked={deliveryMode === "bogota"}
+                    onChange={() => {
+                      setDeliveryMode("bogota")
+                      setSelectedShippingOption("")
+                      setShippingOptions([])
+                      setAddressSaved(false)
+                    }}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      Entrega en Bogotá
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Una vez se verifique el pago, la entrega se programa para
+                      el día siguiente en la mañana.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    checked={deliveryMode === "nacional"}
+                    onChange={() => {
+                      setDeliveryMode("nacional")
+                      setSelectedShippingOption("")
+                      setShippingOptions([])
+                      setAddressSaved(false)
+                    }}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      Envío nacional
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Preparado para conectar plataforma de transportadora según
+                      peso y volumen.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Paso 2
+              </p>
+              <h2 className="mt-2 text-xl font-bold tracking-tight">
+                Datos del pedido
               </h2>
 
               <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -363,43 +474,39 @@ export default function CheckoutPage() {
                   placeholder="Teléfono"
                   className="rounded-xl border border-slate-300 px-4 py-3"
                 />
-                <input
-                  name="address_1"
-                  value={form.address_1}
-                  onChange={handleChange}
-                  placeholder="Dirección *"
-                  className="rounded-xl border border-slate-300 px-4 py-3 md:col-span-2"
-                />
-                <input
-                  name="city"
-                  value={form.city}
-                  onChange={handleChange}
-                  placeholder="Ciudad *"
-                  className="rounded-xl border border-slate-300 px-4 py-3"
-                />
-                <input
-                  name="province"
-                  value={form.province}
-                  onChange={handleChange}
-                  placeholder="Departamento"
-                  className="rounded-xl border border-slate-300 px-4 py-3"
-                />
-                <input
-                  name="postal_code"
-                  value={form.postal_code}
-                  onChange={handleChange}
-                  placeholder="Código postal"
-                  className="rounded-xl border border-slate-300 px-4 py-3"
-                />
-                <select
-                  name="shipping_scope"
-                  value={form.shipping_scope}
-                  onChange={handleChange}
-                  className="rounded-xl border border-slate-300 px-4 py-3"
-                >
-                  <option value="bogota">Entrega en Bogotá</option>
-                  <option value="nacional">Envío nacional</option>
-                </select>
+
+                {deliveryMode !== "pickup" && (
+                  <>
+                    <input
+                      name="address_1"
+                      value={form.address_1}
+                      onChange={handleChange}
+                      placeholder="Dirección *"
+                      className="rounded-xl border border-slate-300 px-4 py-3 md:col-span-2"
+                    />
+                    <input
+                      name="city"
+                      value={form.city}
+                      onChange={handleChange}
+                      placeholder="Ciudad *"
+                      className="rounded-xl border border-slate-300 px-4 py-3"
+                    />
+                    <input
+                      name="province"
+                      value={form.province}
+                      onChange={handleChange}
+                      placeholder="Departamento"
+                      className="rounded-xl border border-slate-300 px-4 py-3"
+                    />
+                    <input
+                      name="postal_code"
+                      value={form.postal_code}
+                      onChange={handleChange}
+                      placeholder="Código postal"
+                      className="rounded-xl border border-slate-300 px-4 py-3"
+                    />
+                  </>
+                )}
               </div>
 
               <button
@@ -407,26 +514,31 @@ export default function CheckoutPage() {
                 disabled={savingAddress}
                 className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {savingAddress ? "Guardando..." : "Guardar dirección"}
+                {savingAddress ? "Guardando..." : "Guardar datos"}
               </button>
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Paso 2
+                Paso 3
               </p>
               <h2 className="mt-2 text-xl font-bold tracking-tight">
                 Método de envío
               </h2>
 
-              {!addressSaved ? (
+              {deliveryMode === "pickup" ? (
+                <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
+                  La recogida en bodega no genera costo de envío. Una vez se
+                  confirme el pago, se coordinará la entrega.
+                </div>
+              ) : !addressSaved ? (
                 <p className="mt-4 text-sm text-slate-500">
-                  Primero guarda la dirección para cargar las opciones de envío.
+                  Primero guarda los datos del pedido para cargar las opciones de envío.
                 </p>
               ) : shippingOptions.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">
-                  No hay opciones de envío disponibles para este alcance. Revisa
-                  las shipping options configuradas en Medusa.
+                  No hay opciones de envío disponibles para esta modalidad. Luego
+                  conectaremos la lógica tarifaria real.
                 </p>
               ) : (
                 <>
@@ -473,7 +585,7 @@ export default function CheckoutPage() {
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Paso 3
+                Paso 4
               </p>
               <h2 className="mt-2 text-xl font-bold tracking-tight">
                 Método de pago
@@ -515,8 +627,7 @@ export default function CheckoutPage() {
                       Wompi / pasarela digital
                     </p>
                     <p className="text-sm text-slate-500">
-                      Incremento del 3% sobre el valor final de la orden. En el
-                      siguiente paso conectaremos la sesión de pago real.
+                      Incremento del 3% sobre el valor final de la orden.
                     </p>
                   </div>
                 </label>
@@ -564,6 +675,17 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex items-center justify-between text-slate-600">
+                  <span>Entrega</span>
+                  <span>
+                    {deliveryMode === "pickup"
+                      ? "Recoger en bodega"
+                      : deliveryMode === "bogota"
+                      ? "Bogotá"
+                      : "Nacional"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-slate-600">
                   <span>Envío</span>
                   <span>
                     {new Intl.NumberFormat("es-CO", {
@@ -600,9 +722,11 @@ export default function CheckoutPage() {
               </div>
 
               <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-xs leading-6 text-slate-500">
-                En el siguiente paso conectaremos la sesión de pago y el cierre
-                de la orden. Si eliges transferencia o Bre-B, el pedido quedará
-                pendiente de validación del soporte.
+                {deliveryMode === "pickup"
+                  ? "La recogida se coordina una vez se verifique el pago."
+                  : deliveryMode === "bogota"
+                  ? "Para entregas en Bogotá, una vez se verifique el pago, la entrega se programa para el día siguiente en la mañana."
+                  : "Para envíos nacionales, en la siguiente fase conectaremos la plataforma de transportadora con peso y volumen."}
               </div>
 
               <button
