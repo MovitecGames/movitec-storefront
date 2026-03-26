@@ -243,7 +243,8 @@ export default function CheckoutPage() {
           first_name: form.first_name,
           last_name: form.last_name,
           company: form.company,
-          address_1: deliveryMode === "pickup" ? "Recoger en bodega" : form.address_1,
+          address_1:
+            deliveryMode === "pickup" ? "Recoger en bodega" : form.address_1,
           city: deliveryMode === "pickup" ? "Bogotá" : form.city,
           province: form.province,
           postal_code: form.postal_code,
@@ -254,7 +255,8 @@ export default function CheckoutPage() {
           first_name: form.first_name,
           last_name: form.last_name,
           company: form.company,
-          address_1: deliveryMode === "pickup" ? "Recoger en bodega" : form.address_1,
+          address_1:
+            deliveryMode === "pickup" ? "Recoger en bodega" : form.address_1,
           city: deliveryMode === "pickup" ? "Bogotá" : form.city,
           province: form.province,
           postal_code: form.postal_code,
@@ -298,12 +300,15 @@ export default function CheckoutPage() {
         }),
       })
 
-      const data = (await response.json()) as
-        | BogotaDistanceResponse
-        | { error?: string }
+      const data = await response.json()
 
       if (!response.ok) {
-        setBogotaError(data?.error || "No fue posible calcular la distancia.")
+        const errorMessage =
+          typeof data === "object" && data !== null && "error" in data
+            ? (data as { error?: string }).error || "No fue posible calcular la distancia."
+            : "No fue posible calcular la distancia."
+
+        setBogotaError(errorMessage)
         return
       }
 
