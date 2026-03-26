@@ -1,38 +1,14 @@
-import { medusa } from "./medusa"
+mport { medusa } from "./medusa"
 
 export async function createCart() {
   return medusa.store.cart.create({
-    region_id: process.env.NEXT_PUBLIC_MEDUSA_REGION_ID!,
+    region_id: "reg_01KMA9MZQ6YJ7K7BN8Y5R6Q8Q9",
+    currency_code: "cop",
   })
 }
 
 export async function retrieveCart(cartId: string) {
   return medusa.store.cart.retrieve(cartId)
-}
-
-export async function createLineItem(
-  cartId: string,
-  variantId: string,
-  quantity: number
-) {
-  return medusa.store.cart.createLineItem(cartId, {
-    variant_id: variantId,
-    quantity,
-  })
-}
-
-export async function updateLineItem(
-  cartId: string,
-  lineItemId: string,
-  quantity: number
-) {
-  return medusa.store.cart.updateLineItem(cartId, lineItemId, {
-    quantity,
-  })
-}
-
-export async function deleteLineItem(cartId: string, lineItemId: string) {
-  return medusa.store.cart.deleteLineItem(cartId, lineItemId)
 }
 
 export async function transferCart(cartId: string) {
@@ -41,48 +17,35 @@ export async function transferCart(cartId: string) {
 
 export async function updateCartAddresses(
   cartId: string,
-  data: {
+  payload: {
     email?: string
-    shipping_address: {
-      first_name: string
-      last_name: string
-      company?: string
-      address_1: string
-      city: string
-      province?: string
-      postal_code?: string
-      country_code: string
-      phone?: string
-    }
-    billing_address?: {
-      first_name: string
-      last_name: string
-      company?: string
-      address_1: string
-      city: string
-      province?: string
-      postal_code?: string
-      country_code: string
-      phone?: string
-    }
+    shipping_address?: Record<string, any>
+    billing_address?: Record<string, any>
   }
 ) {
-  return medusa.store.cart.update(cartId, data)
+  return medusa.store.cart.update(cartId, payload)
 }
 
-export async function listCartShippingOptions(cartId: string) {
-  return medusa.store.fulfillment.listCartOptions({
-    cart_id: cartId,
-  })
-}
+type CreateLineItemPayload =
+  | {
+      variant_id: string
+      quantity: number
+      metadata?: Record<string, any>
+    }
+  | string
 
-export async function addShippingMethod(
+export async function createLineItem(
   cartId: string,
-  optionId: string,
-  data?: Record<string, any>
+  payloadOrVariantId: CreateLineItemPayload,
+  quantityArg?: number
 ) {
-  return medusa.store.cart.addShippingMethod(cartId, {
-    option_id: optionId,
-    data: data || {},
-  })
+  if (typeof payloadOrVariantId === "string") {
+    return medusa.store.cart.createLineItem(cartId, {
+      variant_id: payloadOrVariantId,
+      quantity: quantityArg || 1,
+    })
+  }
+
+  return medusa.store.cart.createLineItem(cartId, payloadOrVariantId)
 }
+
