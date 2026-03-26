@@ -159,38 +159,32 @@ export default function ProductPage({
       setAdding(true)
 
       let cartId = getStoredCartId()
-      let cart: CartResponse | null = null
 
       if (!cartId) {
         const created = await createCart()
         const newCartId = created?.cart?.id
 
-        if (newCartId) {
-          setStoredCartId(newCartId)
-          cartId = newCartId
-        } else {
+        if (!newCartId) {
           alert("No fue posible crear el carrito.")
           return
         }
 
-        cart = created.cart as CartResponse
+        setStoredCartId(newCartId)
+        cartId = newCartId
       } else {
         try {
-          const retrieved = await retrieveCart(cartId)
-          cart = retrieved.cart as CartResponse
+          await retrieveCart(cartId)
         } catch {
           const created = await createCart()
           const newCartId = created?.cart?.id
 
-          if (newCartId) {
-            setStoredCartId(newCartId)
-            cartId = newCartId
-          } else {
+          if (!newCartId) {
             alert("No fue posible crear el carrito.")
             return
           }
 
-          cart = created.cart as CartResponse
+          setStoredCartId(newCartId)
+          cartId = newCartId
         }
       }
 

@@ -26,27 +26,17 @@ export async function updateCartAddresses(
   return medusa.store.cart.update(cartId, payload)
 }
 
-type CreateLineItemPayload =
-  | {
-      variant_id: string
-      quantity: number
-      metadata?: Record<string, any>
-    }
-  | string
-
 export async function createLineItem(
   cartId: string,
-  payloadOrVariantId: CreateLineItemPayload,
-  quantityArg?: number
-) {
-  if (typeof payloadOrVariantId === "string") {
-    return medusa.store.cart.createLineItem(cartId, {
-      variant_id: payloadOrVariantId,
-      quantity: quantityArg || 1,
-    })
+  payload: {
+    variant_id: string
+    quantity: number
+    metadata?: Record<string, any>
   }
+) {
+  await medusa.store.cart.createLineItem(cartId, payload)
 
-  return medusa.store.cart.createLineItem(cartId, payloadOrVariantId)
+  return medusa.store.cart.retrieve(cartId)
 }
 
 export async function updateLineItem(
