@@ -31,6 +31,7 @@ type CartLineItem = {
   title?: string
   quantity?: number
   unit_price?: number
+  metadata?: Record<string, any> | null
   variant?: CartVariant | null
 }
 
@@ -305,7 +306,8 @@ export default function CheckoutPage() {
       if (!response.ok) {
         const errorMessage =
           typeof data === "object" && data !== null && "error" in data
-            ? (data as { error?: string }).error || "No fue posible calcular la distancia."
+            ? (data as { error?: string }).error ||
+              "No fue posible calcular la distancia."
             : "No fue posible calcular la distancia."
 
         setBogotaError(errorMessage)
@@ -406,7 +408,8 @@ export default function CheckoutPage() {
                       Recoger en bodega
                     </p>
                     <p className="text-sm text-slate-500">
-                      Sin costo. La entrega se coordina una vez se verifique el pago.
+                      Sin costo. La entrega se coordina una vez se verifique el
+                      pago.
                     </p>
                   </div>
                 </label>
@@ -427,7 +430,8 @@ export default function CheckoutPage() {
                       Entrega en Bogotá
                     </p>
                     <p className="text-sm text-slate-500">
-                      Tarifa calculada por kilómetros recorridos y peso total del pedido.
+                      Tarifa calculada por kilómetros recorridos y peso total del
+                      pedido.
                     </p>
                   </div>
                 </label>
@@ -448,7 +452,8 @@ export default function CheckoutPage() {
                       Envío nacional
                     </p>
                     <p className="text-sm text-slate-500">
-                      Preparado para conectar transportadora según peso y volumen.
+                      Preparado para conectar transportadora según peso y
+                      volumen.
                     </p>
                   </div>
                 </label>
@@ -561,7 +566,8 @@ export default function CheckoutPage() {
 
                 {!addressSaved ? (
                   <p className="mt-4 text-sm text-slate-500">
-                    Primero guarda los datos del pedido para calcular la distancia.
+                    Primero guarda los datos del pedido para calcular la
+                    distancia.
                   </p>
                 ) : (
                   <>
@@ -570,7 +576,8 @@ export default function CheckoutPage() {
                         Fórmula aplicada
                       </p>
                       <p className="mt-2">
-                        Tarifa = (kilómetros × tarifa por km) + (peso × tarifa por kg)
+                        Tarifa = (kilómetros × tarifa por km) + (peso × tarifa
+                        por kg)
                       </p>
                     </div>
 
@@ -591,17 +598,80 @@ export default function CheckoutPage() {
                     )}
 
                     {bogotaDistanceKm !== null && bogotaShipping && (
-                      <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
-                        <p className="font-semibold">Tarifa Bogotá calculada</p>
-                        <p className="mt-2">
-                          Distancia estimada: {bogotaDistanceText || `${bogotaDistanceKm.toFixed(2)} km`}
+                      <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                          Resultado de la tarifa
                         </p>
-                        <p>
-                          Tiempo estimado: {bogotaDurationText || "No disponible"}
-                        </p>
-                        <p>
-                          Peso total del pedido: {cartPhysicalSummary.totalWeightKg.toFixed(2)} kg
-                        </p>
+
+                        <div className="mt-4 grid gap-3 text-sm text-slate-700">
+                          <div className="flex items-center justify-between">
+                            <span>Distancia estimada</span>
+                            <span className="font-medium">
+                              {bogotaDistanceText ||
+                                `${bogotaDistanceKm.toFixed(2)} km`}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span>Tiempo estimado</span>
+                            <span className="font-medium">
+                              {bogotaDurationText || "No disponible"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span>Peso total del pedido</span>
+                            <span className="font-medium">
+                              {cartPhysicalSummary.totalWeightKg.toFixed(2)} kg
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span>Cobro por kilómetros</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat("es-CO", {
+                                style: "currency",
+                                currency,
+                                maximumFractionDigits: 0,
+                              }).format(bogotaShipping.distanceCost)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span>Cobro por peso</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat("es-CO", {
+                                style: "currency",
+                                currency,
+                                maximumFractionDigits: 0,
+                              }).format(bogotaShipping.weightCost)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span>Tarifa mínima aplicada</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat("es-CO", {
+                                style: "currency",
+                                currency,
+                                maximumFractionDigits: 0,
+                              }).format(bogotaShipping.minPrice)}
+                            </span>
+                          </div>
+
+                          <div className="border-t border-emerald-200 pt-3">
+                            <div className="flex items-center justify-between text-base font-bold text-slate-900">
+                              <span>Tarifa final Bogotá</span>
+                              <span>
+                                {new Intl.NumberFormat("es-CO", {
+                                  style: "currency",
+                                  currency,
+                                  maximumFractionDigits: 0,
+                                }).format(bogotaShipping.finalPrice)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </>
@@ -752,48 +822,6 @@ export default function CheckoutPage() {
                         }).format(shippingCost)}
                   </span>
                 </div>
-
-                {deliveryMode === "bogota" && bogotaDistanceKm !== null && bogotaShipping && (
-                  <>
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Distancia estimada</span>
-                      <span>{bogotaDistanceKm.toFixed(2)} km</span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Cobro por kilómetros</span>
-                      <span>
-                        {new Intl.NumberFormat("es-CO", {
-                          style: "currency",
-                          currency,
-                          maximumFractionDigits: 0,
-                        }).format(bogotaShipping.distanceCost)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Cobro por peso</span>
-                      <span>
-                        {new Intl.NumberFormat("es-CO", {
-                          style: "currency",
-                          currency,
-                          maximumFractionDigits: 0,
-                        }).format(bogotaShipping.weightCost)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Tarifa mínima aplicada</span>
-                      <span>
-                        {new Intl.NumberFormat("es-CO", {
-                          style: "currency",
-                          currency,
-                          maximumFractionDigits: 0,
-                        }).format(bogotaShipping.minPrice)}
-                      </span>
-                    </div>
-                  </>
-                )}
 
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Costo adicional por pago</span>
