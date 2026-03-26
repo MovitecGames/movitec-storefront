@@ -190,16 +190,13 @@ export default function CheckoutPage() {
       destinationState: form.province,
       destinationPostalCode: form.postal_code,
       weightKg: cartPhysicalSummary.totalWeightKg,
-      lengthCm: cartPhysicalSummary.estimatedPackage.length_cm,
-      widthCm: cartPhysicalSummary.estimatedPackage.width_cm,
-      heightCm: cartPhysicalSummary.estimatedPackage.height_cm,
     })
   }, [
     deliveryMode,
     form.city,
     form.province,
     form.postal_code,
-    cartPhysicalSummary,
+    cartPhysicalSummary.totalWeightKg,
   ])
 
   const handleChange = (
@@ -621,14 +618,11 @@ export default function CheckoutPage() {
                     Payload preparado para integrar Envia
                   </p>
 
-                  <p className="mt-2 text-slate-600">
-                    {getNationalShippingPreviewText({
-                      weightKg: cartPhysicalSummary.totalWeightKg,
-                      lengthCm: cartPhysicalSummary.estimatedPackage.length_cm,
-                      widthCm: cartPhysicalSummary.estimatedPackage.width_cm,
-                      heightCm: cartPhysicalSummary.estimatedPackage.height_cm,
-                    })}
-                  </p>
+                  {nationalPayload && (
+                    <p className="mt-2 text-slate-600">
+                      {getNationalShippingPreviewText(nationalPayload)}
+                    </p>
+                  )}
 
                   {nationalPayload && (
                     <pre className="mt-4 overflow-x-auto rounded-xl bg-white p-4 text-xs text-slate-600">
@@ -811,30 +805,13 @@ export default function CheckoutPage() {
 
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Peso total</span>
-                  <span>{cartPhysicalSummary.totalWeightG} g</span>
+                  <span>{cartPhysicalSummary.totalWeightGrams} g</span>
                 </div>
 
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Peso total convertido</span>
                   <span>{cartPhysicalSummary.totalWeightKg.toFixed(2)} kg</span>
                 </div>
-
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Largo estimado</span>
-                  <span>{cartPhysicalSummary.estimatedPackage.length_cm} cm</span>
-                </div>
-
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Ancho estimado</span>
-                  <span>{cartPhysicalSummary.estimatedPackage.width_cm} cm</span>
-                </div>
-
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Alto estimado</span>
-                  <span>{cartPhysicalSummary.estimatedPackage.height_cm} cm</span>
-                </div>
-
-                <hr className="my-2 border-slate-200" />
 
                 <div className="flex items-center justify-between text-lg font-bold text-slate-900">
                   <span>Total a pagar</span>
