@@ -49,3 +49,16 @@ export async function createLineItem(
   return medusa.store.cart.createLineItem(cartId, payloadOrVariantId)
 }
 
+export async function updateLineItem(
+  cartId: string,
+  lineItemId: string,
+  quantity: number
+) {
+  return medusa.store.cart.updateLineItem(cartId, lineItemId, {
+    quantity,
+  })
+}
+
+export async function deleteLineItem(cartId: string, lineItemId: string) {
+  return medusa.store.cart.deleteLineItem(cartId, lineItemId)
+}
