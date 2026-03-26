@@ -51,11 +51,6 @@ type CartItem = {
   quantity?: number
 }
 
-type CartResponse = {
-  id: string
-  items?: CartItem[]
-}
-
 export default function ProductPage({
   params,
 }: {
@@ -197,11 +192,16 @@ export default function ProductPage({
         return
       }
 
-      const { cart: updatedCart } = await createLineItem(
-        cartId,
-        variant.id,
-        quantity
-      )
+      const { cart: updatedCart } = await createLineItem(cartId, {
+        variant_id: variant.id,
+        quantity,
+        metadata: {
+          weight_g: variant.metadata?.weight_g ?? "",
+          width_cm: variant.metadata?.width_cm ?? "",
+          height_cm: variant.metadata?.height_cm ?? "",
+          length_cm: variant.metadata?.length_cm ?? "",
+        },
+      })
 
       const count =
         updatedCart.items?.reduce(
