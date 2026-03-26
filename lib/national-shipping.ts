@@ -1,23 +1,24 @@
-export function buildNationalShippingPayload(items: any[]) {
-  let totalWeightGrams = 0
+(Sin asunto)
+Movitec Games
 
-  for (const item of items) {
-    const quantity = item.quantity || 1
-    const weight = Number(item.variant?.metadata?.weight_g || 0)
-
-    totalWeightGrams += weight * quantity
-  }
-
+​Movitec Games​
+export function buildNationalShippingPayload(data: {
+  destinationCity: string
+  destinationState: string
+  destinationPostalCode: string
+  weightKg: number
+}) {
   return {
-    totalWeightKg: totalWeightGrams / 1000,
-    declaredValue: items.reduce((acc, item) => {
-      return acc + (item.unit_price || 0) * (item.quantity || 1)
-    }, 0),
+    destinationCity: data.destinationCity,
+    destinationState: data.destinationState,
+    destinationPostalCode: data.destinationPostalCode,
+    weightKg: data.weightKg,
+    declaredValue: 0, // luego lo conectamos con el carrito real
   }
 }
 
 export function getNationalShippingPreviewText(payload: any) {
-  return `Envío nacional estimado para ${payload.totalWeightKg.toFixed(
+  return `Envío nacional estimado a ${payload.destinationCity} (${payload.weightKg.toFixed(
     2
-  )} kg. La tarifa final se calculará con la transportadora.`
+  )} kg). La tarifa final se calculará con la transportadora.`
 }
