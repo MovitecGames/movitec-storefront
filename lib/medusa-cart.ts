@@ -1,4 +1,4 @@
-mport { medusa } from "./medusa"
+import { medusa } from "./medusa"
 
 export async function createCart() {
   return medusa.store.cart.create({
