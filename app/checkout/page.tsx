@@ -142,8 +142,10 @@ export default function CheckoutPage() {
   const commercialValue = totalPvp * commercialTerms.rate
   const totalWithCommercialTerms = totalPvp - commercialValue
 
+  const pickupCost = 0
+
   const selectedShippingCost = useMemo(() => {
-    if (deliveryMode === "pickup") return 0
+    if (deliveryMode === "pickup") return pickupCost
     const found = shippingOptions.find((opt) => opt.id === selectedShippingOption)
     return found?.amount || 0
   }, [shippingOptions, selectedShippingOption, deliveryMode])
@@ -180,9 +182,16 @@ export default function CheckoutPage() {
     return []
   }
 
+  const resetShippingSelection = () => {
+    setSelectedShippingOption("")
+    setShippingOptions([])
+    setAddressSaved(false)
+  }
+
   const handleSaveAddress = async () => {
     try {
       const cartId = getStoredCartId()
+
       if (!cartId) {
         alert("No se encontró un carrito activo.")
         return
@@ -210,7 +219,7 @@ export default function CheckoutPage() {
           first_name: form.first_name,
           last_name: form.last_name,
           company: form.company,
-          address_1: deliveryMode === "pickup" ? "Recoge en bodega" : form.address_1,
+          address_1: deliveryMode === "pickup" ? "Recoger en bodega" : form.address_1,
           city: deliveryMode === "pickup" ? "Bogotá" : form.city,
           province: form.province,
           postal_code: form.postal_code,
@@ -221,7 +230,7 @@ export default function CheckoutPage() {
           first_name: form.first_name,
           last_name: form.last_name,
           company: form.company,
-          address_1: deliveryMode === "pickup" ? "Recoge en bodega" : form.address_1,
+          address_1: deliveryMode === "pickup" ? "Recoger en bodega" : form.address_1,
           city: deliveryMode === "pickup" ? "Bogotá" : form.city,
           province: form.province,
           postal_code: form.postal_code,
@@ -238,15 +247,14 @@ export default function CheckoutPage() {
 
       const cartOptionsResponse = await listCartShippingOptions(cartId)
       const rawOptions = (cartOptionsResponse as any)?.shipping_options || []
-
       const filtered = filterShippingOptions(rawOptions, deliveryMode)
+
       setShippingOptions(filtered)
       setAddressSaved(true)
-
-      alert("Dirección guardada correctamente.")
+      alert("Datos guardados correctamente.")
     } catch (error) {
       console.error(error)
-      alert("No fue posible guardar la información.")
+      alert("No fue posible guardar la información del pedido.")
     } finally {
       setSavingAddress(false)
     }
@@ -255,11 +263,12 @@ export default function CheckoutPage() {
   const handleSaveShipping = async () => {
     try {
       if (deliveryMode === "pickup") {
-        alert("La recogida en bodega no requiere guardar método de envío.")
+        alert("La recogida en bodega no requiere método de envío.")
         return
       }
 
       const cartId = getStoredCartId()
+
       if (!cartId) {
         alert("No se encontró un carrito activo.")
         return
@@ -296,7 +305,7 @@ export default function CheckoutPage() {
     )
   }
 
-  if (!cart || !(cart.items || []).length) {
+  if (!cart || !items.length) {
     return (
       <main className="min-h-screen bg-neutral-50 text-slate-900">
         <div className="mx-auto max-w-6xl px-6 py-10">
@@ -358,9 +367,7 @@ export default function CheckoutPage() {
                     checked={deliveryMode === "pickup"}
                     onChange={() => {
                       setDeliveryMode("pickup")
-                      setSelectedShippingOption("")
-                      setShippingOptions([])
-                      setAddressSaved(false)
+                      resetShippingSelection()
                     }}
                     className="mt-1"
                   />
@@ -369,8 +376,7 @@ export default function CheckoutPage() {
                       Recoger en bodega
                     </p>
                     <p className="text-sm text-slate-500">
-                      Sin costo de envío. La entrega se coordina una vez se
-                      verifique el pago.
+                      Sin costo. La entrega se coordina una vez se verifique el pago.
                     </p>
                   </div>
                 </label>
@@ -382,9 +388,7 @@ export default function CheckoutPage() {
                     checked={deliveryMode === "bogota"}
                     onChange={() => {
                       setDeliveryMode("bogota")
-                      setSelectedShippingOption("")
-                      setShippingOptions([])
-                      setAddressSaved(false)
+                      resetShippingSelection()
                     }}
                     className="mt-1"
                   />
@@ -406,9 +410,7 @@ export default function CheckoutPage() {
                     checked={deliveryMode === "nacional"}
                     onChange={() => {
                       setDeliveryMode("nacional")
-                      setSelectedShippingOption("")
-                      setShippingOptions([])
-                      setAddressSaved(false)
+                      resetShippingSelection()
                     }}
                     className="mt-1"
                   />
@@ -417,8 +419,7 @@ export default function CheckoutPage() {
                       Envío nacional
                     </p>
                     <p className="text-sm text-slate-500">
-                      Preparado para conectar plataforma de transportadora según
-                      peso y volumen.
+                      Preparado para conectar transportadora según peso y volumen.
                     </p>
                   </div>
                 </label>
@@ -530,7 +531,7 @@ export default function CheckoutPage() {
 
               {deliveryMode === "pickup" ? (
                 <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
-                  La recogida en bodega no genera costo de envío. Una vez se
+                  La recogida en bodega no requiere costo de envío. Una vez se
                   confirme el pago, se coordinará la entrega.
                 </div>
               ) : !addressSaved ? (
