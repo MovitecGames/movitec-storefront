@@ -4,19 +4,34 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { medusa } from "../../lib/medusa"
 import {
-  addShippingMethod,
-  listCartShippingOptions,
   retrieveCart,
   transferCart,
   updateCartAddresses,
 } from "../../lib/medusa-cart"
 import { getStoredCartId } from "../../lib/cart-storage"
+import { calculateCartPhysicalSummary } from "../../lib/shipping-utils"
+import { calculateBogotaShipping } from "../../lib/bogota-distance-rate"
+import {
+  buildNationalShippingPayload,
+  getNationalShippingPreviewText,
+} from "../../lib/national-shipping"
+
+type CartVariant = {
+  metadata?: {
+    weight_g?: string | number
+    length_cm?: string | number
+    width_cm?: string | number
+    height_cm?: string | number
+    [key: string]: any
+  } | null
+}
 
 type CartLineItem = {
   id: string
   title?: string
   quantity?: number
   unit_price?: number
+  variant?: CartVariant | null
 }
 
 type CartType = {
@@ -24,11 +39,6 @@ type CartType = {
   currency_code?: string
   email?: string
   items?: CartLineItem[]
-  shipping_methods?: {
-    id: string
-    amount?: number
-    name?: string
-  }[]
 }
 
 type CustomerItem = {
@@ -41,27 +51,33 @@ type CustomerItem = {
   } | null
 }
 
-type ShippingOption = {
-  id: string
-  name?: string
-  price_type?: string
-  amount?: number
-}
-
 type DeliveryMode = "pickup" | "bogota" | "nacional"
 type PaymentMethod = "breb" | "wompi"
+
+type BogotaDistanceResponse = {
+  ok: boolean
+  distanceMeters: number
+  distanceKm: number
+  durationSeconds: number
+  distanceText: string
+  durationText: string
+  destinationAddress: string
+}
 
 export default function CheckoutPage() {
   const [cart, setCart] = useState<CartType | null>(null)
   const [customer, setCustomer] = useState<CustomerItem | null>(null)
-  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([])
-  const [selectedShippingOption, setSelectedShippingOption] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("breb")
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("pickup")
   const [loading, setLoading] = useState(true)
   const [savingAddress, setSavingAddress] = useState(false)
-  const [savingShipping, setSavingShipping] = useState(false)
   const [addressSaved, setAddressSaved] = useState(false)
+
+  const [calculatingBogota, setCalculatingBogota] = useState(false)
+  const [bogotaDistanceKm, setBogotaDistanceKm] = useState<number | null>(null)
+  const [bogotaDistanceText, setBogotaDistanceText] = useState("")
+  const [bogotaDurationText, setBogotaDurationText] = useState("")
+  const [bogotaError, setBogotaError] = useState("")
 
   const [form, setForm] = useState({
     first_name: "",
@@ -126,6 +142,10 @@ export default function CheckoutPage() {
     return items.reduce((acc, item) => acc + getLineSubtotal(item), 0)
   }, [items])
 
+  const cartPhysicalSummary = useMemo(() => {
+    return calculateCartPhysicalSummary(items)
+  }, [items])
+
   const commercialTerms = useMemo(() => {
     if (totalPvp >= 4000000) {
       return { rate: 0.38, label: "Condición comercial 38%" }
@@ -142,17 +162,45 @@ export default function CheckoutPage() {
   const commercialValue = totalPvp * commercialTerms.rate
   const totalWithCommercialTerms = totalPvp - commercialValue
 
-  const pickupCost = 0
+  const bogotaShipping = useMemo(() => {
+    if (deliveryMode !== "bogota" || bogotaDistanceKm === null) return null
 
-  const selectedShippingCost = useMemo(() => {
-    if (deliveryMode === "pickup") return pickupCost
-    const found = shippingOptions.find((opt) => opt.id === selectedShippingOption)
-    return found?.amount || 0
-  }, [shippingOptions, selectedShippingOption, deliveryMode])
+    return calculateBogotaShipping({
+      distanceKm: bogotaDistanceKm,
+      weightKg: cartPhysicalSummary.totalWeightKg,
+    })
+  }, [deliveryMode, bogotaDistanceKm, cartPhysicalSummary.totalWeightKg])
 
-  const totalBeforePayment = totalWithCommercialTerms + selectedShippingCost
+  const shippingCost = useMemo(() => {
+    if (deliveryMode === "pickup") return 0
+    if (deliveryMode === "bogota") return bogotaShipping?.finalPrice || 0
+    if (deliveryMode === "nacional") return 0
+    return 0
+  }, [deliveryMode, bogotaShipping])
+
+  const totalBeforePayment = totalWithCommercialTerms + shippingCost
   const wompiFee = paymentMethod === "wompi" ? totalBeforePayment * 0.03 : 0
   const finalCheckoutTotal = totalBeforePayment + wompiFee
+
+  const nationalPayload = useMemo(() => {
+    if (deliveryMode !== "nacional") return null
+
+    return buildNationalShippingPayload({
+      destinationCity: form.city,
+      destinationState: form.province,
+      destinationPostalCode: form.postal_code,
+      weightKg: cartPhysicalSummary.totalWeightKg,
+      lengthCm: cartPhysicalSummary.estimatedPackage.length_cm,
+      widthCm: cartPhysicalSummary.estimatedPackage.width_cm,
+      heightCm: cartPhysicalSummary.estimatedPackage.height_cm,
+    })
+  }, [
+    deliveryMode,
+    form.city,
+    form.province,
+    form.postal_code,
+    cartPhysicalSummary,
+  ])
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -161,31 +209,12 @@ export default function CheckoutPage() {
     setForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  const filterShippingOptions = (
-    options: ShippingOption[],
-    mode: DeliveryMode
-  ) => {
-    if (mode === "bogota") {
-      return options.filter((opt) => {
-        const name = (opt.name || "").toLowerCase()
-        return name.includes("bog") || name.includes("bogotá")
-      })
-    }
-
-    if (mode === "nacional") {
-      return options.filter((opt) => {
-        const name = (opt.name || "").toLowerCase()
-        return !name.includes("bog") && !name.includes("bogotá")
-      })
-    }
-
-    return []
-  }
-
-  const resetShippingSelection = () => {
-    setSelectedShippingOption("")
-    setShippingOptions([])
+  const resetDeliveryState = () => {
     setAddressSaved(false)
+    setBogotaDistanceKm(null)
+    setBogotaDistanceText("")
+    setBogotaDurationText("")
+    setBogotaError("")
   }
 
   const handleSaveAddress = async () => {
@@ -210,8 +239,6 @@ export default function CheckoutPage() {
       }
 
       setSavingAddress(true)
-      setSelectedShippingOption("")
-      setShippingOptions([])
 
       await updateCartAddresses(cartId, {
         email: form.email,
@@ -239,19 +266,8 @@ export default function CheckoutPage() {
         },
       })
 
-      if (deliveryMode === "pickup") {
-        setAddressSaved(true)
-        alert("Datos guardados. La modalidad de recogida no requiere envío.")
-        return
-      }
-
-      const cartOptionsResponse = await listCartShippingOptions(cartId)
-      const rawOptions = (cartOptionsResponse as any)?.shipping_options || []
-      const filtered = filterShippingOptions(rawOptions, deliveryMode)
-
-      setShippingOptions(filtered)
       setAddressSaved(true)
-      alert("Datos guardados correctamente.")
+      alert("Datos del pedido guardados correctamente.")
     } catch (error) {
       console.error(error)
       alert("No fue posible guardar la información del pedido.")
@@ -260,38 +276,50 @@ export default function CheckoutPage() {
     }
   }
 
-  const handleSaveShipping = async () => {
+  const handleCalculateBogotaShipping = async () => {
     try {
-      if (deliveryMode === "pickup") {
-        alert("La recogida en bodega no requiere método de envío.")
+      if (!form.address_1 || !form.city) {
+        alert("Completa la dirección y la ciudad para calcular el envío.")
         return
       }
 
-      const cartId = getStoredCartId()
+      setCalculatingBogota(true)
+      setBogotaError("")
+      setBogotaDistanceKm(null)
+      setBogotaDistanceText("")
+      setBogotaDurationText("")
 
-      if (!cartId) {
-        alert("No se encontró un carrito activo.")
+      const fullAddress = `${form.address_1}, ${form.city}, ${form.province}, Colombia`
+
+      const response = await fetch("/api/bogota-distance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address: fullAddress,
+        }),
+      })
+
+      const data = (await response.json()) as
+        | BogotaDistanceResponse
+        | { error?: string }
+
+      if (!response.ok) {
+        setBogotaError(data?.error || "No fue posible calcular la distancia.")
         return
       }
 
-      if (!selectedShippingOption) {
-        alert("Selecciona un método de envío.")
-        return
-      }
+      const okData = data as BogotaDistanceResponse
 
-      setSavingShipping(true)
-
-      await addShippingMethod(cartId, selectedShippingOption)
-
-      const { cart } = await retrieveCart(cartId)
-      setCart(cart as CartType)
-
-      alert("Método de envío guardado.")
+      setBogotaDistanceKm(okData.distanceKm)
+      setBogotaDistanceText(okData.distanceText)
+      setBogotaDurationText(okData.durationText)
     } catch (error) {
       console.error(error)
-      alert("No fue posible guardar el método de envío.")
+      setBogotaError("Ocurrió un error calculando la tarifa Bogotá.")
     } finally {
-      setSavingShipping(false)
+      setCalculatingBogota(false)
     }
   }
 
@@ -367,7 +395,7 @@ export default function CheckoutPage() {
                     checked={deliveryMode === "pickup"}
                     onChange={() => {
                       setDeliveryMode("pickup")
-                      resetShippingSelection()
+                      resetDeliveryState()
                     }}
                     className="mt-1"
                   />
@@ -388,7 +416,7 @@ export default function CheckoutPage() {
                     checked={deliveryMode === "bogota"}
                     onChange={() => {
                       setDeliveryMode("bogota")
-                      resetShippingSelection()
+                      resetDeliveryState()
                     }}
                     className="mt-1"
                   />
@@ -397,8 +425,7 @@ export default function CheckoutPage() {
                       Entrega en Bogotá
                     </p>
                     <p className="text-sm text-slate-500">
-                      Una vez se verifique el pago, la entrega se programa para
-                      el día siguiente en la mañana.
+                      Tarifa calculada por kilómetros recorridos y peso total del pedido.
                     </p>
                   </div>
                 </label>
@@ -410,7 +437,7 @@ export default function CheckoutPage() {
                     checked={deliveryMode === "nacional"}
                     onChange={() => {
                       setDeliveryMode("nacional")
-                      resetShippingSelection()
+                      resetDeliveryState()
                     }}
                     className="mt-1"
                   />
@@ -521,70 +548,96 @@ export default function CheckoutPage() {
               </button>
             </section>
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Paso 3
-              </p>
-              <h2 className="mt-2 text-xl font-bold tracking-tight">
-                Método de envío
-              </h2>
+            {deliveryMode === "bogota" && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Paso 3
+                </p>
+                <h2 className="mt-2 text-xl font-bold tracking-tight">
+                  Cálculo de tarifa Bogotá
+                </h2>
 
-              {deliveryMode === "pickup" ? (
-                <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
-                  La recogida en bodega no requiere costo de envío. Una vez se
-                  confirme el pago, se coordinará la entrega.
+                {!addressSaved ? (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Primero guarda los datos del pedido para calcular la distancia.
+                  </p>
+                ) : (
+                  <>
+                    <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+                      <p className="font-semibold text-slate-900">
+                        Fórmula aplicada
+                      </p>
+                      <p className="mt-2">
+                        Tarifa = (kilómetros × tarifa por km) + (peso × tarifa por kg)
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleCalculateBogotaShipping}
+                      disabled={calculatingBogota}
+                      className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {calculatingBogota
+                        ? "Calculando distancia..."
+                        : "Calcular tarifa Bogotá"}
+                    </button>
+
+                    {bogotaError && (
+                      <div className="mt-4 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
+                        {bogotaError}
+                      </div>
+                    )}
+
+                    {bogotaDistanceKm !== null && bogotaShipping && (
+                      <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
+                        <p className="font-semibold">Tarifa Bogotá calculada</p>
+                        <p className="mt-2">
+                          Distancia estimada: {bogotaDistanceText || `${bogotaDistanceKm.toFixed(2)} km`}
+                        </p>
+                        <p>
+                          Tiempo estimado: {bogotaDurationText || "No disponible"}
+                        </p>
+                        <p>
+                          Peso total del pedido: {cartPhysicalSummary.totalWeightKg.toFixed(2)} kg
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
+
+            {deliveryMode === "nacional" && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Paso 3
+                </p>
+                <h2 className="mt-2 text-xl font-bold tracking-tight">
+                  Base para cotización nacional
+                </h2>
+
+                <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900">
+                    Payload preparado para integrar Envia
+                  </p>
+
+                  <p className="mt-2 text-slate-600">
+                    {getNationalShippingPreviewText({
+                      weightKg: cartPhysicalSummary.totalWeightKg,
+                      lengthCm: cartPhysicalSummary.estimatedPackage.length_cm,
+                      widthCm: cartPhysicalSummary.estimatedPackage.width_cm,
+                      heightCm: cartPhysicalSummary.estimatedPackage.height_cm,
+                    })}
+                  </p>
+
+                  {nationalPayload && (
+                    <pre className="mt-4 overflow-x-auto rounded-xl bg-white p-4 text-xs text-slate-600">
+{JSON.stringify(nationalPayload, null, 2)}
+                    </pre>
+                  )}
                 </div>
-              ) : !addressSaved ? (
-                <p className="mt-4 text-sm text-slate-500">
-                  Primero guarda los datos del pedido para cargar las opciones de envío.
-                </p>
-              ) : shippingOptions.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-500">
-                  No hay opciones de envío disponibles para esta modalidad. Luego
-                  conectaremos la lógica tarifaria real.
-                </p>
-              ) : (
-                <>
-                  <div className="mt-4 space-y-3">
-                    {shippingOptions.map((option) => (
-                      <label
-                        key={option.id}
-                        className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 hover:bg-slate-50"
-                      >
-                        <input
-                          type="radio"
-                          name="shippingOption"
-                          value={option.id}
-                          checked={selectedShippingOption === option.id}
-                          onChange={() => setSelectedShippingOption(option.id)}
-                          className="mt-1"
-                        />
-                        <div>
-                          <p className="font-semibold text-slate-900">
-                            {option.name || "Opción de envío"}
-                          </p>
-                          <p className="text-sm text-slate-500">
-                            {new Intl.NumberFormat("es-CO", {
-                              style: "currency",
-                              currency,
-                              maximumFractionDigits: 0,
-                            }).format(option.amount || 0)}
-                          </p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={handleSaveShipping}
-                    disabled={savingShipping || !selectedShippingOption}
-                    className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    {savingShipping ? "Guardando..." : "Guardar método de envío"}
-                  </button>
-                </>
-              )}
-            </section>
+              </section>
+            )}
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -691,13 +744,57 @@ export default function CheckoutPage() {
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Envío</span>
                   <span>
-                    {new Intl.NumberFormat("es-CO", {
-                      style: "currency",
-                      currency,
-                      maximumFractionDigits: 0,
-                    }).format(selectedShippingCost)}
+                    {deliveryMode === "nacional"
+                      ? "Pendiente API"
+                      : new Intl.NumberFormat("es-CO", {
+                          style: "currency",
+                          currency,
+                          maximumFractionDigits: 0,
+                        }).format(shippingCost)}
                   </span>
                 </div>
+
+                {deliveryMode === "bogota" && bogotaDistanceKm !== null && bogotaShipping && (
+                  <>
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Distancia estimada</span>
+                      <span>{bogotaDistanceKm.toFixed(2)} km</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Cobro por kilómetros</span>
+                      <span>
+                        {new Intl.NumberFormat("es-CO", {
+                          style: "currency",
+                          currency,
+                          maximumFractionDigits: 0,
+                        }).format(bogotaShipping.distanceCost)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Cobro por peso</span>
+                      <span>
+                        {new Intl.NumberFormat("es-CO", {
+                          style: "currency",
+                          currency,
+                          maximumFractionDigits: 0,
+                        }).format(bogotaShipping.weightCost)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Tarifa mínima aplicada</span>
+                      <span>
+                        {new Intl.NumberFormat("es-CO", {
+                          style: "currency",
+                          currency,
+                          maximumFractionDigits: 0,
+                        }).format(bogotaShipping.minPrice)}
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Costo adicional por pago</span>
@@ -708,6 +805,33 @@ export default function CheckoutPage() {
                       maximumFractionDigits: 0,
                     }).format(wompiFee)}
                   </span>
+                </div>
+
+                <hr className="my-2 border-slate-200" />
+
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Peso total</span>
+                  <span>{cartPhysicalSummary.totalWeightG} g</span>
+                </div>
+
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Peso total convertido</span>
+                  <span>{cartPhysicalSummary.totalWeightKg.toFixed(2)} kg</span>
+                </div>
+
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Largo estimado</span>
+                  <span>{cartPhysicalSummary.estimatedPackage.length_cm} cm</span>
+                </div>
+
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Ancho estimado</span>
+                  <span>{cartPhysicalSummary.estimatedPackage.width_cm} cm</span>
+                </div>
+
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Alto estimado</span>
+                  <span>{cartPhysicalSummary.estimatedPackage.height_cm} cm</span>
                 </div>
 
                 <hr className="my-2 border-slate-200" />
@@ -728,8 +852,8 @@ export default function CheckoutPage() {
                 {deliveryMode === "pickup"
                   ? "La recogida se coordina una vez se verifique el pago."
                   : deliveryMode === "bogota"
-                  ? "Para entregas en Bogotá, una vez se verifique el pago, la entrega se programa para el día siguiente en la mañana."
-                  : "Para envíos nacionales, en la siguiente fase conectaremos la plataforma de transportadora con peso y volumen."}
+                  ? "La tarifa Bogotá ya queda calculada con Google Maps según distancia y peso del pedido."
+                  : "La logística nacional queda lista para conectar la cotización por API con Envia."}
               </div>
 
               <button
