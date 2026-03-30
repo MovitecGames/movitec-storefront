@@ -51,6 +51,11 @@ type CartItem = {
   quantity?: number
 }
 
+type CartResponse = {
+  id: string
+  items?: CartItem[]
+}
+
 export default function ProductPage({
   params,
 }: {
@@ -87,22 +92,33 @@ export default function ProductPage({
         setProduct(productResponse.products?.[0] || null)
         setCustomer(currentCustomer)
 
-        const storedCartId = getStoredCartId()
+        let storedCartId = getStoredCartId()
 
         if (storedCartId) {
           try {
             if (currentCustomer) {
-              await transferCart(storedCartId).catch(() => null)
+              const transferred = await transferCart(storedCartId).catch(
+                () => null
+              )
+
+              const transferredCartId = (transferred as any)?.cart?.id
+
+              if (transferredCartId) {
+                storedCartId = transferredCartId
+                setStoredCartId(transferredCartId)
+              }
             }
 
-            const { cart } = await retrieveCart(storedCartId)
-            const count =
-              cart.items?.reduce(
-                (acc: number, item: CartItem) => acc + (item.quantity || 0),
-                0
-              ) || 0
+            if (storedCartId) {
+              const { cart } = await retrieveCart(storedCartId)
+              const count =
+                cart.items?.reduce(
+                  (acc: number, item: CartItem) => acc + (item.quantity || 0),
+                  0
+                ) || 0
 
-            setCartCount(count)
+              setCartCount(count)
+            }
           } catch (error) {
             console.error(error)
           }
@@ -184,7 +200,13 @@ export default function ProductPage({
       }
 
       if (customer && cartId) {
-        await transferCart(cartId).catch(() => null)
+        const transferred = await transferCart(cartId).catch(() => null)
+        const transferredCartId = (transferred as any)?.cart?.id
+
+        if (transferredCartId) {
+          cartId = transferredCartId
+          setStoredCartId(transferredCartId)
+        }
       }
 
       if (!cartId) {
@@ -206,7 +228,7 @@ export default function ProductPage({
       setCartCount(count)
       alert("Producto agregado al carrito.")
     } catch (error) {
-      console.error(error)
+      console.error("ERROR AGREGANDO AL CARRITO:", error)
       alert("No fue posible agregar el producto al carrito.")
     } finally {
       setAdding(false)
