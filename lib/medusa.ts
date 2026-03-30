@@ -5,7 +5,6 @@ export const medusa = new Medusa({
   publishableKey: process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY!,
   debug: process.env.NODE_ENV === "development",
   auth: {
-    type: "session",
-    fetchCredentials: "include",
+    type: "jwt",
   },
 })

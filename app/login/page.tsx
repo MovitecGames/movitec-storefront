@@ -27,7 +27,9 @@ export default function LoginPage() {
         password,
       })
 
-      window.location.href = "/"
+      await medusa.store.customer.retrieve()
+
+      window.location.replace("/")
     } catch (err) {
       console.error(err)
       setError(
