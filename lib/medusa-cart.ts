@@ -34,7 +34,16 @@ export async function createLineItem(
     metadata?: Record<string, any>
   }
 ) {
-  return medusa.store.cart.createLineItem(cartId, payload)
+  // 🔥 validación defensiva (no rompe nada existente)
+  if (!payload?.variant_id) {
+    throw new Error("variant_id es requerido")
+  }
+
+  return medusa.store.cart.createLineItem(cartId, {
+    variant_id: payload.variant_id,
+    quantity: payload.quantity,
+    metadata: payload.metadata || {},
+  })
 }
 
 export async function updateLineItem(
