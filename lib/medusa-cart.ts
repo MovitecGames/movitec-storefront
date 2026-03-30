@@ -8,7 +8,9 @@ export async function createCart() {
 }
 
 export async function retrieveCart(cartId: string) {
-  return medusa.store.cart.retrieve(cartId)
+  return medusa.store.cart.retrieve(cartId, {
+    fields: "*items,+items.metadata,+items.variant,+items.variant.metadata",
+  } as any)
 }
 
 export async function transferCart(cartId: string) {
@@ -34,15 +36,9 @@ export async function createLineItem(
     metadata?: Record<string, any>
   }
 ) {
-  // 🔥 validación defensiva (no rompe nada existente)
-  if (!payload?.variant_id) {
-    throw new Error("variant_id es requerido")
-  }
-
   return medusa.store.cart.createLineItem(cartId, {
     variant_id: payload.variant_id,
     quantity: payload.quantity,
-    metadata: payload.metadata || {},
   })
 }
 

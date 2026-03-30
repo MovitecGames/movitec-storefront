@@ -195,12 +195,6 @@ export default function ProductPage({
       const { cart: updatedCart } = await createLineItem(cartId, {
         variant_id: variant.id,
         quantity,
-        metadata: {
-          weight_g: variant.metadata?.weight_g ?? "",
-          width_cm: variant.metadata?.width_cm ?? "",
-          height_cm: variant.metadata?.height_cm ?? "",
-          length_cm: variant.metadata?.length_cm ?? "",
-        },
       })
 
       const count =
