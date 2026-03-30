@@ -7,7 +7,6 @@ import {
   createCart,
   createLineItem,
   retrieveCart,
-  transferCart,
 } from "../../../lib/medusa-cart"
 import { getStoredCartId, setStoredCartId } from "../../../lib/cart-storage"
 
@@ -51,11 +50,6 @@ type CartItem = {
   quantity?: number
 }
 
-type CartResponse = {
-  id: string
-  items?: CartItem[]
-}
-
 export default function ProductPage({
   params,
 }: {
@@ -92,33 +86,18 @@ export default function ProductPage({
         setProduct(productResponse.products?.[0] || null)
         setCustomer(currentCustomer)
 
-        let storedCartId = getStoredCartId()
+        const storedCartId = getStoredCartId()
 
         if (storedCartId) {
           try {
-            if (currentCustomer) {
-              const transferred = await transferCart(storedCartId).catch(
-                () => null
-              )
+            const { cart } = await retrieveCart(storedCartId)
+            const count =
+              cart.items?.reduce(
+                (acc: number, item: CartItem) => acc + (item.quantity || 0),
+                0
+              ) || 0
 
-              const transferredCartId = (transferred as any)?.cart?.id
-
-              if (transferredCartId) {
-                storedCartId = transferredCartId
-                setStoredCartId(transferredCartId)
-              }
-            }
-
-            if (storedCartId) {
-              const { cart } = await retrieveCart(storedCartId)
-              const count =
-                cart.items?.reduce(
-                  (acc: number, item: CartItem) => acc + (item.quantity || 0),
-                  0
-                ) || 0
-
-              setCartCount(count)
-            }
+            setCartCount(count)
           } catch (error) {
             console.error(error)
           }
@@ -196,16 +175,6 @@ export default function ProductPage({
 
           setStoredCartId(newCartId)
           cartId = newCartId
-        }
-      }
-
-      if (customer && cartId) {
-        const transferred = await transferCart(cartId).catch(() => null)
-        const transferredCartId = (transferred as any)?.cart?.id
-
-        if (transferredCartId) {
-          cartId = transferredCartId
-          setStoredCartId(transferredCartId)
         }
       }
 
