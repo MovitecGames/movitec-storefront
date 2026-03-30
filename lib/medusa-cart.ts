@@ -1,8 +1,10 @@
 import { medusa } from "./medusa"
 
+const REGION_ID = process.env.NEXT_PUBLIC_MEDUSA_REGION_ID!
+
 export async function createCart() {
   return medusa.store.cart.create({
-    region_id: "reg_01KMA9MZQ6YJ7K7BN8Y5R6Q8Q9",
+    region_id: REGION_ID,
     currency_code: "cop",
   })
 }
