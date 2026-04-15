@@ -429,8 +429,10 @@ export async function quoteWithEnvia(input: QuoteShipmentInput) {
     }
   }
 
-  const carriers = cleanString(input.carrier || "")
-    ? [cleanString(input.carrier)]
+  const normalizedCarrier = cleanString(input.carrier || "")
+  
+  const carriers = normalizedCarrier
+    ? [normalizedCarrier]
     : ["servientrega", "interrapidisimo", "coordinadora", "deprisa", "tcc"]
 
   const attempts = await Promise.all(
