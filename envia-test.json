@@ -1,0 +1,41 @@
+{
+  "carrier": "servientrega",
+  "destination": {
+    "name": "Cliente Prueba",
+    "company": "Prueba SAS",
+    "email": "test003@movitec.com.co",
+    "phone": "3001112233",
+    "street": "Calle 10 # 5-30",
+    "city": "MEDELLIN",
+    "state": "ANTIOQUIA",
+    "country": "CO",
+    "postalCode": "050001",
+    "cityCode": "05001000"
+  },
+  "cartItems": [
+    {
+      "sku": "GAME-001",
+      "name": "Juego A",
+      "quantity": 2,
+      "weight_g": 1200,
+      "length_cm": 29,
+      "width_cm": 29,
+      "height_cm": 7,
+      "unit_price": 95000,
+      "can_rotate": true,
+      "ships_alone": false
+    },
+    {
+      "sku": "GAME-002",
+      "name": "Juego B",
+      "quantity": 1,
+      "weight_g": 1800,
+      "length_cm": 32,
+      "width_cm": 24,
+      "height_cm": 8,
+      "unit_price": 250000,
+      "can_rotate": true,
+      "ships_alone": false
+    }
+  ]
+}

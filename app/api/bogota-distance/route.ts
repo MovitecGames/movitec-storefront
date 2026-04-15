@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim()
+}
+
+function normalizeDestinationAddress(value: string) {
+  return normalizeWhitespace(value).replace(/\bNo\b\.?/gi, "#")
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const address = String(body?.address || "").trim()
+    const rawAddress = String(body?.address || "").trim()
 
-    if (!address) {
+    if (!rawAddress) {
       return NextResponse.json(
         { error: "Debes enviar una dirección válida." },
         { status: 400 }
@@ -22,8 +30,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const origin = encodeURIComponent(originAddress)
-    const destination = encodeURIComponent(address)
+    const normalizedOrigin = normalizeWhitespace(originAddress)
+    const normalizedDestination = normalizeDestinationAddress(rawAddress)
+
+    const origin = encodeURIComponent(normalizedOrigin)
+    const destination = encodeURIComponent(normalizedDestination)
 
     const url =
       `https://maps.googleapis.com/maps/api/distancematrix/json` +
@@ -34,29 +45,67 @@ export async function POST(req: NextRequest) {
       `&region=co` +
       `&key=${apiKey}`
 
+    console.log("[BOGOTA_DISTANCE] origin:", normalizedOrigin)
+    console.log("[BOGOTA_DISTANCE] destination:", normalizedDestination)
+
     const response = await fetch(url, {
       method: "GET",
       cache: "no-store",
     })
 
     if (!response.ok) {
+      const responseText = await response.text().catch(() => "")
+
+      console.error("[BOGOTA_DISTANCE] google http error", {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText,
+      })
+
       return NextResponse.json(
-        { error: "No fue posible consultar Google Maps." },
+        {
+          error: "No fue posible consultar Google Maps.",
+          google_http_status: response.status,
+        },
         { status: 502 }
       )
     }
 
     const data = await response.json()
 
-    const element = data?.rows?.[0]?.elements?.[0]
-    const status = element?.status
+    if (data?.status && data.status !== "OK") {
+      console.error("[BOGOTA_DISTANCE] google api status error", {
+        status: data.status,
+        origin: normalizedOrigin,
+        destination: normalizedDestination,
+      })
 
-    if (status !== "OK") {
+      return NextResponse.json(
+        {
+          error: "Google Maps devolvió un estado inválido para la consulta.",
+          google_status: data.status,
+        },
+        { status: 400 }
+      )
+    }
+
+    const element = data?.rows?.[0]?.elements?.[0]
+    const elementStatus = element?.status
+
+    if (elementStatus !== "OK") {
+      console.error("[BOGOTA_DISTANCE] google element status error", {
+        elementStatus,
+        origin: normalizedOrigin,
+        destination: normalizedDestination,
+      })
+
       return NextResponse.json(
         {
           error:
             "Google Maps no pudo calcular la distancia para esa dirección.",
-          google_status: status || null,
+          google_status: elementStatus || null,
+          originAddress: normalizedOrigin,
+          destinationAddress: normalizedDestination,
         },
         { status: 400 }
       )
@@ -74,10 +123,11 @@ export async function POST(req: NextRequest) {
       durationSeconds,
       distanceText,
       durationText,
-      destinationAddress: address,
+      originAddress: normalizedOrigin,
+      destinationAddress: normalizedDestination,
     })
   } catch (error) {
-    console.error(error)
+    console.error("[BOGOTA_DISTANCE] unexpected error", error)
 
     return NextResponse.json(
       { error: "Ocurrió un error calculando la distancia de Bogotá." },

@@ -11,7 +11,8 @@ export async function createCart() {
 
 export async function retrieveCart(cartId: string) {
   return medusa.store.cart.retrieve(cartId, {
-    fields: "*items,+items.metadata,+items.variant,+items.variant.metadata",
+    fields:
+      "*items,+items.metadata,+items.variant,+items.variant.metadata,+metadata,+shipping_address,+billing_address",
   } as any)
 }
 
@@ -25,9 +26,19 @@ export async function updateCartAddresses(
     email?: string
     shipping_address?: Record<string, any>
     billing_address?: Record<string, any>
+    metadata?: Record<string, any>
   }
 ) {
-  return medusa.store.cart.update(cartId, payload)
+  return medusa.store.cart.update(cartId, payload as any)
+}
+
+export async function updateCartMetadata(
+  cartId: string,
+  metadata: Record<string, any>
+) {
+  return medusa.store.cart.update(cartId, {
+    metadata,
+  } as any)
 }
 
 export async function createLineItem(
@@ -56,4 +67,19 @@ export async function updateLineItem(
 
 export async function deleteLineItem(cartId: string, lineItemId: string) {
   return medusa.store.cart.deleteLineItem(cartId, lineItemId)
+}
+
+export async function listCartShippingOptions(cartId: string) {
+  return medusa.store.fulfillment.listCartOptions({
+    cart_id: cartId,
+  })
+}
+
+export async function addCartShippingMethod(
+  cartId: string,
+  optionId: string
+) {
+  return medusa.store.cart.addShippingMethod(cartId, {
+    option_id: optionId,
+  })
 }

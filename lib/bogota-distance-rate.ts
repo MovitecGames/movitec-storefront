@@ -2,12 +2,18 @@ export function calculateBogotaShipping(args: {
   distanceKm: number
   weightKg: number
 }) {
-  const KM_RATE = 850
+  // Modelo económico para Bogotá:
+  // - Base mínima competitiva
+  // - Recargo por km moderado
+  // - Recargo por peso suave
+  // - Redondeo comercial al peso
+
+  const KM_RATE = 1000
   const KG_RATE = 400
   const MIN_PRICE = 8000
 
-  const safeDistance = Number.isFinite(args.distanceKm) ? args.distanceKm : 0
-  const safeWeight = Number.isFinite(args.weightKg) ? args.weightKg : 0
+  const safeDistance = Number.isFinite(args.distanceKm) ? Math.max(args.distanceKm, 0) : 0
+  const safeWeight = Number.isFinite(args.weightKg) ? Math.max(args.weightKg, 0) : 0
 
   const distanceCost = safeDistance * KM_RATE
   const weightCost = safeWeight * KG_RATE
@@ -21,6 +27,6 @@ export function calculateBogotaShipping(args: {
     distanceCost,
     weightCost,
     rawTotal,
-    finalPrice,
+    finalPrice: Math.round(finalPrice),
   }
 }

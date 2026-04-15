@@ -8,8 +8,12 @@ import {
   retrieveCart,
   transferCart,
   updateLineItem,
+  updateCartMetadata,
 } from "../../lib/medusa-cart"
-import { getStoredCartId } from "../../lib/cart-storage"
+import {
+  getStoredCartId,
+  clearStoredCheckoutState,
+} from "../../lib/cart-storage"
 
 type CartLineItem = {
   id: string
@@ -22,6 +26,7 @@ type CartType = {
   id: string
   currency_code?: string
   items?: CartLineItem[]
+  metadata?: Record<string, any> | null
 }
 
 type CustomerItem = {
@@ -32,6 +37,15 @@ type CustomerItem = {
   } | null
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error || "")
+}
+
+function isCompletedCartError(error: unknown) {
+  return getErrorMessage(error).toLowerCase().includes("already completed")
+}
+
 export default function CarritoPage() {
   const [cart, setCart] = useState<CartType | null>(null)
   const [customer, setCustomer] = useState<CustomerItem | null>(null)
@@ -40,6 +54,12 @@ export default function CarritoPage() {
   const [retentionType, setRetentionType] = useState<
     "none" | "retefuente" | "retefuente_ica"
   >("none")
+  const [processingItemId, setProcessingItemId] = useState<string | null>(null)
+
+  const clearCompletedCartState = () => {
+    clearStoredCheckoutState()
+    setCart(null)
+  }
 
   const loadCart = async () => {
     try {
@@ -62,8 +82,31 @@ export default function CarritoPage() {
 
       const { cart } = await retrieveCart(cartId)
       setCart(cart as CartType)
+
+      const cartMetadata = (cart as any)?.metadata || {}
+
+      if (cartMetadata.payment_method === "breb") {
+        setPaymentMethod("breb")
+      } else if (cartMetadata.payment_method === "wompi") {
+        setPaymentMethod("wompi")
+      }
+
+      if (
+        cartMetadata.retention_type === "none" ||
+        cartMetadata.retention_type === "retefuente" ||
+        cartMetadata.retention_type === "retefuente_ica"
+      ) {
+        setRetentionType(cartMetadata.retention_type)
+      }
     } catch (error) {
       console.error(error)
+
+      if (isCompletedCartError(error)) {
+        clearCompletedCartState()
+        setLoading(false)
+        return
+      }
+
       setCart(null)
     } finally {
       setLoading(false)
@@ -150,33 +193,133 @@ export default function CarritoPage() {
       ? commercialTerms.nextThreshold - totalPvp
       : 0
 
+  const saveFinancialMetadata = async (
+    nextRetentionType: "none" | "retefuente" | "retefuente_ica",
+    nextPaymentMethod: "breb" | "wompi"
+  ) => {
+    const cartId = getStoredCartId()
+    if (!cartId) return
+
+    const ivaIncludedValue = totalWithCommercialTerms * (19 / 119)
+    const baseWithoutIVAValue = totalWithCommercialTerms - ivaIncludedValue
+
+    let nextRetefuente = 0
+    let nextIca = 0
+
+    if (nextRetentionType === "retefuente") {
+      nextRetefuente = baseWithoutIVAValue * 0.025
+    }
+
+    if (nextRetentionType === "retefuente_ica") {
+      nextRetefuente = baseWithoutIVAValue * 0.025
+      nextIca = baseWithoutIVAValue * 0.00966
+    }
+
+    const nextPaymentFeeRate = nextPaymentMethod === "wompi" ? 0.03 : 0
+    const nextPaymentFeeValue = totalWithCommercialTerms * nextPaymentFeeRate
+
+    const nextFinalPayableTotal =
+      totalWithCommercialTerms - nextRetefuente - nextIca + nextPaymentFeeValue
+
+    try {
+      await updateCartMetadata(cartId, {
+        retention_type: nextRetentionType,
+        retefuente_value: nextRetefuente,
+        ica_value: nextIca,
+        iva_included_value: ivaIncludedValue,
+        base_without_iva_value: baseWithoutIVAValue,
+        payment_method: nextPaymentMethod,
+        payment_fee_value: nextPaymentFeeValue,
+        cart_total_pvp: totalPvp,
+        cart_commercial_label: commercialTerms.label,
+        cart_commercial_value: commercialValue,
+        cart_total_with_commercial_terms: totalWithCommercialTerms,
+        cart_final_payable_total: nextFinalPayableTotal,
+      })
+    } catch (error) {
+      console.error("[CART_SAVE_FINANCIAL_METADATA] unexpected error", error)
+    }
+  }
+
   const handleIncrease = async (itemId: string, quantity: number) => {
     const cartId = getStoredCartId()
     if (!cartId) return
 
-    await updateLineItem(cartId, itemId, quantity + 1)
-    await loadCart()
+    try {
+      setProcessingItemId(itemId)
+      await updateLineItem(cartId, itemId, quantity + 1)
+      await loadCart()
+    } catch (error) {
+      console.error("[CART_HANDLE_INCREASE] unexpected error", error)
+
+      if (isCompletedCartError(error)) {
+        clearCompletedCartState()
+        alert(
+          "Este carrito ya fue convertido en pedido. Se limpiará para que empieces uno nuevo."
+        )
+        return
+      }
+
+      alert("No fue posible actualizar la cantidad.")
+    } finally {
+      setProcessingItemId(null)
+    }
   }
 
   const handleDecrease = async (itemId: string, quantity: number) => {
     const cartId = getStoredCartId()
     if (!cartId) return
 
-    if (quantity <= 1) {
-      await deleteLineItem(cartId, itemId)
-    } else {
-      await updateLineItem(cartId, itemId, quantity - 1)
-    }
+    try {
+      setProcessingItemId(itemId)
 
-    await loadCart()
+      if (quantity <= 1) {
+        await deleteLineItem(cartId, itemId)
+      } else {
+        await updateLineItem(cartId, itemId, quantity - 1)
+      }
+
+      await loadCart()
+    } catch (error) {
+      console.error("[CART_HANDLE_DECREASE] unexpected error", error)
+
+      if (isCompletedCartError(error)) {
+        clearCompletedCartState()
+        alert(
+          "Este carrito ya fue convertido en pedido. Se limpiará para que empieces uno nuevo."
+        )
+        return
+      }
+
+      alert("No fue posible actualizar el producto del carrito.")
+    } finally {
+      setProcessingItemId(null)
+    }
   }
 
   const handleRemove = async (itemId: string) => {
     const cartId = getStoredCartId()
     if (!cartId) return
 
-    await deleteLineItem(cartId, itemId)
-    await loadCart()
+    try {
+      setProcessingItemId(itemId)
+      await deleteLineItem(cartId, itemId)
+      await loadCart()
+    } catch (error) {
+      console.error("[CART_HANDLE_REMOVE] unexpected error", error)
+
+      if (isCompletedCartError(error)) {
+        clearCompletedCartState()
+        alert(
+          "Este carrito ya fue convertido en pedido. Se limpiará para que empieces uno nuevo."
+        )
+        return
+      }
+
+      alert("No fue posible eliminar el producto del carrito.")
+    } finally {
+      setProcessingItemId(null)
+    }
   }
 
   if (loading) {
@@ -234,69 +377,76 @@ export default function CarritoPage() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1.45fr_0.85fr]">
             <div className="space-y-4">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-bold">{item.title}</h2>
+              {items.map((item) => {
+                const isProcessing = processingItemId === item.id
 
-                      <p className="mt-2 text-sm text-slate-600">
-                        Precio PVP unitario:{" "}
-                        <span className="font-semibold text-slate-900">
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h2 className="text-lg font-bold">{item.title}</h2>
+
+                        <p className="mt-2 text-sm text-slate-600">
+                          Precio PVP unitario:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {new Intl.NumberFormat("es-CO", {
+                              style: "currency",
+                              currency,
+                              maximumFractionDigits: 0,
+                            }).format(item.unit_price || 0)}
+                          </span>
+                        </p>
+
+                        <div className="mt-4 flex items-center gap-3">
+                          <button
+                            onClick={() =>
+                              handleDecrease(item.id, item.quantity || 1)
+                            }
+                            disabled={isProcessing}
+                            className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            -
+                          </button>
+
+                          <div className="flex h-10 min-w-[56px] items-center justify-center rounded-xl border border-slate-300 px-4 font-semibold">
+                            {item.quantity || 0}
+                          </div>
+
+                          <button
+                            onClick={() =>
+                              handleIncrease(item.id, item.quantity || 0)
+                            }
+                            disabled={isProcessing}
+                            className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <p className="mt-4 text-sm font-semibold text-slate-900">
+                          Subtotal PVP:{" "}
                           {new Intl.NumberFormat("es-CO", {
                             style: "currency",
                             currency,
                             maximumFractionDigits: 0,
-                          }).format(item.unit_price || 0)}
-                        </span>
-                      </p>
-
-                      <div className="mt-4 flex items-center gap-3">
-                        <button
-                          onClick={() =>
-                            handleDecrease(item.id, item.quantity || 1)
-                          }
-                          className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50"
-                        >
-                          -
-                        </button>
-
-                        <div className="flex h-10 min-w-[56px] items-center justify-center rounded-xl border border-slate-300 px-4 font-semibold">
-                          {item.quantity || 0}
-                        </div>
-
-                        <button
-                          onClick={() =>
-                            handleIncrease(item.id, item.quantity || 0)
-                          }
-                          className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50"
-                        >
-                          +
-                        </button>
+                          }).format(getLineSubtotal(item))}
+                        </p>
                       </div>
 
-                      <p className="mt-4 text-sm font-semibold text-slate-900">
-                        Subtotal PVP:{" "}
-                        {new Intl.NumberFormat("es-CO", {
-                          style: "currency",
-                          currency,
-                          maximumFractionDigits: 0,
-                        }).format(getLineSubtotal(item))}
-                      </p>
+                      <button
+                        onClick={() => handleRemove(item.id)}
+                        disabled={isProcessing}
+                        className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {isProcessing ? "Eliminando..." : "Eliminar"}
+                      </button>
                     </div>
-
-                    <button
-                      onClick={() => handleRemove(item.id)}
-                      className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                    >
-                      Eliminar
-                    </button>
                   </div>
-                </div>
-              ))}
+                )
+              })}
 
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -384,7 +534,10 @@ export default function CarritoPage() {
                       name="retentionType"
                       value="none"
                       checked={retentionType === "none"}
-                      onChange={() => setRetentionType("none")}
+                      onChange={async () => {
+                        setRetentionType("none")
+                        await saveFinancialMetadata("none", paymentMethod)
+                      }}
                       className="mt-1"
                     />
                     <div>
@@ -401,7 +554,10 @@ export default function CarritoPage() {
                       name="retentionType"
                       value="retefuente"
                       checked={retentionType === "retefuente"}
-                      onChange={() => setRetentionType("retefuente")}
+                      onChange={async () => {
+                        setRetentionType("retefuente")
+                        await saveFinancialMetadata("retefuente", paymentMethod)
+                      }}
                       className="mt-1"
                     />
                     <div>
@@ -420,7 +576,13 @@ export default function CarritoPage() {
                       name="retentionType"
                       value="retefuente_ica"
                       checked={retentionType === "retefuente_ica"}
-                      onChange={() => setRetentionType("retefuente_ica")}
+                      onChange={async () => {
+                        setRetentionType("retefuente_ica")
+                        await saveFinancialMetadata(
+                          "retefuente_ica",
+                          paymentMethod
+                        )
+                      }}
                       className="mt-1"
                     />
                     <div>
@@ -455,7 +617,10 @@ export default function CarritoPage() {
                       name="paymentMethod"
                       value="breb"
                       checked={paymentMethod === "breb"}
-                      onChange={() => setPaymentMethod("breb")}
+                      onChange={async () => {
+                        setPaymentMethod("breb")
+                        await saveFinancialMetadata(retentionType, "breb")
+                      }}
                       className="mt-1"
                     />
                     <div>
@@ -475,7 +640,10 @@ export default function CarritoPage() {
                       name="paymentMethod"
                       value="wompi"
                       checked={paymentMethod === "wompi"}
-                      onChange={() => setPaymentMethod("wompi")}
+                      onChange={async () => {
+                        setPaymentMethod("wompi")
+                        await saveFinancialMetadata(retentionType, "wompi")
+                      }}
                       className="mt-1"
                     />
                     <div>

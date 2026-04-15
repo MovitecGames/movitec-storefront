@@ -8,7 +8,11 @@ import {
   createLineItem,
   retrieveCart,
 } from "../../../lib/medusa-cart"
-import { getStoredCartId, setStoredCartId } from "../../../lib/cart-storage"
+import {
+  getStoredCartId,
+  setStoredCartId,
+  clearStoredCheckoutState,
+} from "../../../lib/cart-storage"
 
 type ProductImage = {
   url?: string | null
@@ -50,6 +54,19 @@ type CartItem = {
   quantity?: number
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error || "")
+}
+
+function isCompletedCartError(error: unknown) {
+  return getErrorMessage(error).toLowerCase().includes("already completed")
+}
+
+function clearStoredCartState() {
+  clearStoredCheckoutState()
+}
+
 export default function ProductPage({
   params,
 }: {
@@ -61,6 +78,30 @@ export default function ProductPage({
   const [quantity, setQuantity] = useState(1)
   const [cartCount, setCartCount] = useState(0)
   const [adding, setAdding] = useState(false)
+
+  const syncCartCount = async (cartId: string) => {
+    try {
+      const { cart } = await retrieveCart(cartId)
+
+      const count =
+        cart.items?.reduce(
+          (acc: number, item: CartItem) => acc + (item.quantity || 0),
+          0
+        ) || 0
+
+      setCartCount(count)
+      return cart
+    } catch (error) {
+      console.error(error)
+
+      if (isCompletedCartError(error)) {
+        clearStoredCartState()
+        setCartCount(0)
+      }
+
+      return null
+    }
+  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -89,18 +130,9 @@ export default function ProductPage({
         const storedCartId = getStoredCartId()
 
         if (storedCartId) {
-          try {
-            const { cart } = await retrieveCart(storedCartId)
-            const count =
-              cart.items?.reduce(
-                (acc: number, item: CartItem) => acc + (item.quantity || 0),
-                0
-              ) || 0
-
-            setCartCount(count)
-          } catch (error) {
-            console.error(error)
-          }
+          await syncCartCount(storedCartId)
+        } else {
+          setCartCount(0)
         }
       } catch (error) {
         console.error(error)
@@ -111,6 +143,45 @@ export default function ProductPage({
 
     loadData()
   }, [params])
+
+  const ensureValidCartId = async () => {
+    let cartId = getStoredCartId()
+
+    if (!cartId) {
+      const created = await createCart()
+      const newCartId = created?.cart?.id
+
+      if (!newCartId) {
+        throw new Error("No fue posible crear el carrito.")
+      }
+
+      setStoredCartId(newCartId)
+      setCartCount(0)
+      return newCartId
+    }
+
+    try {
+      await retrieveCart(cartId)
+      return cartId
+    } catch (error) {
+      const message = getErrorMessage(error).toLowerCase()
+
+      if (message.includes("already completed")) {
+        clearStoredCartState()
+      }
+
+      const created = await createCart()
+      const newCartId = created?.cart?.id
+
+      if (!newCartId) {
+        throw new Error("No fue posible crear un carrito nuevo.")
+      }
+
+      setStoredCartId(newCartId)
+      setCartCount(0)
+      return newCartId
+    }
+  }
 
   if (loading) {
     return (
@@ -148,54 +219,47 @@ export default function ProductPage({
 
       setAdding(true)
 
-      let cartId = getStoredCartId()
+      let cartId = await ensureValidCartId()
 
-      if (!cartId) {
-        const created = await createCart()
-        const newCartId = created?.cart?.id
+      try {
+        const { cart: updatedCart } = await createLineItem(cartId, {
+          variant_id: variant.id,
+          quantity,
+        })
 
-        if (!newCartId) {
-          alert("No fue posible crear el carrito.")
+        const count =
+          updatedCart.items?.reduce(
+            (acc: number, item: CartItem) => acc + (item.quantity || 0),
+            0
+          ) || 0
+
+        setCartCount(count)
+        alert("Producto agregado al carrito.")
+      } catch (error) {
+        if (isCompletedCartError(error)) {
+          clearStoredCartState()
+          setCartCount(0)
+
+          cartId = await ensureValidCartId()
+
+          const { cart: updatedCart } = await createLineItem(cartId, {
+            variant_id: variant.id,
+            quantity,
+          })
+
+          const count =
+            updatedCart.items?.reduce(
+              (acc: number, item: CartItem) => acc + (item.quantity || 0),
+              0
+            ) || 0
+
+          setCartCount(count)
+          alert("Producto agregado al carrito.")
           return
         }
 
-        setStoredCartId(newCartId)
-        cartId = newCartId
-      } else {
-        try {
-          await retrieveCart(cartId)
-        } catch {
-          const created = await createCart()
-          const newCartId = created?.cart?.id
-
-          if (!newCartId) {
-            alert("No fue posible crear el carrito.")
-            return
-          }
-
-          setStoredCartId(newCartId)
-          cartId = newCartId
-        }
+        throw error
       }
-
-      if (!cartId) {
-        alert("No fue posible identificar un carrito válido.")
-        return
-      }
-
-      const { cart: updatedCart } = await createLineItem(cartId, {
-        variant_id: variant.id,
-        quantity,
-      })
-
-      const count =
-        updatedCart.items?.reduce(
-          (acc: number, item: CartItem) => acc + (item.quantity || 0),
-          0
-        ) || 0
-
-      setCartCount(count)
-      alert("Producto agregado al carrito.")
     } catch (error) {
       console.error("ERROR AGREGANDO AL CARRITO:", error)
       alert("No fue posible agregar el producto al carrito.")
