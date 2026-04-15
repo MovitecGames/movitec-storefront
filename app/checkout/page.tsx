@@ -641,7 +641,6 @@ export default function CheckoutPage() {
       destinationState: form.province,
       destinationPostalCode: form.postal_code,
       weightKg: cartPhysicalSummary.totalWeightKg,
-      declaredValue,
     })
   }, [
     deliveryMode,
