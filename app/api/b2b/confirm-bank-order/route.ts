@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import Medusa from "@medusajs/js-sdk"
+import { supabaseAdmin } from "../../../../lib/supabase-admin"
 
 const medusa = new Medusa({
   baseUrl: process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL!,
@@ -215,6 +216,67 @@ function buildOrderEmailHtml(params: {
       </p>
     </div>
   `
+}
+
+async function saveOrderSnapshot(snapshot: {
+  order_id: string
+  public_order_number: string
+  customer_email: string
+  customer_name: string
+  company: string
+  phone: string
+  payment_method: string
+  commercial_payment_status: string
+  delivery_mode: string
+  shipping_address: string
+  currency_code: string
+  total_pvp: number
+  commercial_label: string
+  commercial_value: number
+  total_with_commercial_terms: number
+  shipping_cost: number
+  retefuente_value: number
+  ica_value: number
+  payment_fee: number
+  final_total: number
+  items_json: any[]
+  raw_json: Record<string, any>
+}) {
+  const { error } = await supabaseAdmin
+    .from("b2b_order_snapshots")
+    .upsert(
+      {
+        order_id: snapshot.order_id,
+        public_order_number: snapshot.public_order_number,
+        customer_email: snapshot.customer_email,
+        customer_name: snapshot.customer_name,
+        company: snapshot.company,
+        phone: snapshot.phone,
+        payment_method: snapshot.payment_method,
+        commercial_payment_status: snapshot.commercial_payment_status,
+        delivery_mode: snapshot.delivery_mode,
+        shipping_address: snapshot.shipping_address,
+        currency_code: snapshot.currency_code,
+        total_pvp: snapshot.total_pvp,
+        commercial_label: snapshot.commercial_label,
+        commercial_value: snapshot.commercial_value,
+        total_with_commercial_terms: snapshot.total_with_commercial_terms,
+        shipping_cost: snapshot.shipping_cost,
+        retefuente_value: snapshot.retefuente_value,
+        ica_value: snapshot.ica_value,
+        payment_fee: snapshot.payment_fee,
+        final_total: snapshot.final_total,
+        items_json: snapshot.items_json,
+        raw_json: snapshot.raw_json,
+      },
+      { onConflict: "order_id" }
+    )
+
+  if (error) {
+    throw new Error(
+      `No fue posible guardar el snapshot del pedido. ${error.message}`
+    )
+  }
 }
 
 export async function POST(req: Request) {
@@ -444,6 +506,35 @@ export async function POST(req: Request) {
       })),
     }
 
+    try {
+      await saveOrderSnapshot({
+        order_id: orderPayload.id,
+        public_order_number: orderPayload.public_order_number,
+        customer_email: orderPayload.customer.email || "",
+        customer_name: orderPayload.customer.name || "",
+        company: orderPayload.customer.company || "",
+        phone: orderPayload.customer.phone || "",
+        payment_method: paymentMethod,
+        commercial_payment_status: "pending",
+        delivery_mode: deliveryMode,
+        shipping_address: shippingAddress,
+        currency_code: orderPayload.currency_code,
+        total_pvp: totalPvp,
+        commercial_label: commercialLabel,
+        commercial_value: commercialValue,
+        total_with_commercial_terms: totalWithCommercialTerms,
+        shipping_cost: shippingCost,
+        retefuente_value: retefuenteValue,
+        ica_value: icaValue,
+        payment_fee: paymentFee,
+        final_total: finalTotal,
+        items_json: orderPayload.items,
+        raw_json: orderPayload,
+      })
+    } catch (snapshotError) {
+      console.error("[B2B_ORDER_SNAPSHOT] unexpected error", snapshotError)
+    }
+
     let salesEmailSent = false
     let customerEmailSent = false
 
@@ -544,3 +635,4 @@ export async function POST(req: Request) {
     )
   }
 }
+
