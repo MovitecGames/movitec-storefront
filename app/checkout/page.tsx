@@ -150,6 +150,35 @@ type FlattenedNationalService = NationalQuoteService & {
   sourceServiceIndex: number
 }
 
+type WompiStartResponse = {
+  ok: boolean
+  error?: string
+  wompi?: {
+    public_key: string
+    currency: string
+    amount_in_cents: number
+    reference: string
+    signature?: {
+      integrity?: string
+    }
+    redirect_url?: string
+    customer_data?: {
+      email?: string
+      full_name?: string
+      phone_number?: string
+    }
+    shipping_address?: {
+      address_line_1?: string
+      country?: string
+      city?: string
+      region?: string
+      phone_number?: string
+      name?: string
+      postal_code?: string
+    }
+  }
+}
+
 function normalizeWhitespace(value: string) {
   return String(value || "").replace(/\s+/g, " ").trim()
 }
@@ -466,6 +495,54 @@ function generateCheckoutOrderNumber(existing?: string) {
   const random = Math.floor(100 + Math.random() * 900)
 
   return `MV-${year}${month}${day}-${hours}${minutes}${seconds}-${random}`
+}
+
+function redirectToWompiCheckout(payload: NonNullable<WompiStartResponse["wompi"]>) {
+  const form = document.createElement("form")
+  form.method = "GET"
+  form.action = "https://checkout.wompi.co/p/"
+
+  const appendField = (name: string, value: unknown) => {
+    const normalizedValue = String(value ?? "").trim()
+    if (!normalizedValue) return
+
+    const input = document.createElement("input")
+    input.type = "hidden"
+    input.name = name
+    input.value = normalizedValue
+    form.appendChild(input)
+  }
+
+  appendField("public-key", payload.public_key)
+  appendField("currency", payload.currency)
+  appendField("amount-in-cents", payload.amount_in_cents)
+  appendField("reference", payload.reference)
+  appendField("signature:integrity", payload.signature?.integrity || "")
+  appendField("redirect-url", payload.redirect_url || "")
+
+  appendField("customer-data:email", payload.customer_data?.email || "")
+  appendField("customer-data:full-name", payload.customer_data?.full_name || "")
+  appendField("customer-data:phone-number", payload.customer_data?.phone_number || "")
+
+  appendField(
+    "shipping-address:address-line-1",
+    payload.shipping_address?.address_line_1 || ""
+  )
+  appendField("shipping-address:country", payload.shipping_address?.country || "")
+  appendField("shipping-address:city", payload.shipping_address?.city || "")
+  appendField("shipping-address:region", payload.shipping_address?.region || "")
+  appendField(
+    "shipping-address:phone-number",
+    payload.shipping_address?.phone_number || ""
+  )
+  appendField("shipping-address:name", payload.shipping_address?.name || "")
+  appendField(
+    "shipping-address:postal-code",
+    payload.shipping_address?.postal_code || ""
+  )
+
+  document.body.appendChild(form)
+  form.submit()
 }
 
 export default function CheckoutPage() {
@@ -1251,7 +1328,26 @@ export default function CheckoutPage() {
         return
       }
 
-      alert("El flujo de Wompi será el siguiente paso. Por ahora deja Bre-B como método funcional.")
+      const wompiResponse = await fetch("/api/b2b/start-wompi-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cartId }),
+      })
+
+      const wompiData =
+        (await wompiResponse.json().catch(() => null)) as WompiStartResponse | null
+
+      if (!wompiResponse.ok || !wompiData?.ok || !wompiData?.wompi) {
+        alert(
+          wompiData?.error || "No fue posible iniciar el pago con Wompi."
+        )
+        return
+      }
+
+      redirectToWompiCheckout(wompiData.wompi)
+      return
     } catch (error) {
       console.error("[CHECKOUT_CONTINUE_TO_PAYMENT] unexpected error", error)
       alert("No fue posible continuar al pago.")
