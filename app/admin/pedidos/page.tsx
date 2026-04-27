@@ -253,6 +253,18 @@ export default function AdminPedidosPage() {
     }
   }
 
+  async function handleLogout() {
+    try {
+      await fetch("/api/admin/logout", {
+        method: "POST",
+      })
+    } catch (error) {
+      console.error("[ADMIN_PEDIDOS_LOGOUT] unexpected error", error)
+    } finally {
+      window.location.href = "/admin/login"
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-neutral-50 text-slate-900">
@@ -273,6 +285,14 @@ export default function AdminPedidosPage() {
           >
             ← Volver al catálogo
           </Link>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Cerrar sesión
+          </button>
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
