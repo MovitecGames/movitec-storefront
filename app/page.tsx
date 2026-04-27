@@ -114,6 +114,24 @@ export default function Home() {
                 <p className="text-xs text-slate-500">
                   {isApproved ? "Cuenta aprobada" : "Cuenta en revisión"}
                 </p>
+
+                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                  <Link
+                    href="/cuenta/pedidos"
+                    className="text-xs font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+                  >
+                    Historial de pedidos
+                  </Link>
+
+                  <span className="text-xs text-slate-300">|</span>
+
+                  <Link
+                    href="/cuenta/pedidos"
+                    className="text-xs font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+                  >
+                    Estado de pedidos
+                  </Link>
+                </div>
               </div>
             )}
           </div>
