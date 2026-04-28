@@ -20,6 +20,9 @@ type ProductImage = {
 
 type ProductVariant = {
   id: string
+  inventory_quantity?: number | null
+  manage_inventory?: boolean | null
+  allow_backorder?: boolean | null
   calculated_price?: {
     calculated_amount?: number
     currency_code?: string
@@ -63,8 +66,73 @@ function isCompletedCartError(error: unknown) {
   return getErrorMessage(error).toLowerCase().includes("already completed")
 }
 
+function isInventoryError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase()
+
+  return (
+    message.includes("required inventory") ||
+    message.includes("does not have the required inventory") ||
+    message.includes("insufficient inventory") ||
+    message.includes("not enough inventory") ||
+    message.includes("out of stock")
+  )
+}
+
 function clearStoredCartState() {
   clearStoredCheckoutState()
+}
+
+function getVariantInventoryQuantity(variant?: ProductVariant) {
+  if (!variant) return null
+
+  if (typeof variant.inventory_quantity === "number") {
+    return variant.inventory_quantity
+  }
+
+  return null
+}
+
+function getStockStatus(variant?: ProductVariant) {
+  const inventoryQuantity = getVariantInventoryQuantity(variant)
+
+  if (inventoryQuantity === null) {
+    return {
+      label: "Disponible",
+      helperText: "Producto disponible para canal B2B Movitec Games.",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      isSoldOut: false,
+      inventoryQuantity,
+    }
+  }
+
+  if (inventoryQuantity <= 0) {
+    return {
+      label: "Agotado temporalmente",
+      helperText:
+        "Este título hace parte de nuestro catálogo activo y pronto volverá a estar disponible para pedidos comerciales.",
+      className: "border-slate-300 bg-slate-100 text-slate-600",
+      isSoldOut: true,
+      inventoryQuantity,
+    }
+  }
+
+  if (inventoryQuantity <= 5) {
+    return {
+      label: "Pocas unidades",
+      helperText: "Quedan pocas unidades disponibles para pedido inmediato.",
+      className: "border-amber-200 bg-amber-50 text-amber-700",
+      isSoldOut: false,
+      inventoryQuantity,
+    }
+  }
+
+  return {
+    label: "Disponible",
+    helperText: "Producto disponible para pedido inmediato.",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    isSoldOut: false,
+    inventoryQuantity,
+  }
 }
 
 export default function ProductPage({
@@ -111,7 +179,8 @@ export default function ProductPage({
         const productPromise = medusa.store.product.list({
           handle: resolvedParams.handle,
           country_code: "co",
-          fields: "*variants.calculated_price,+images,+variants.metadata",
+          fields:
+            "*variants.calculated_price,+images,+variants.metadata,+variants.inventory_quantity,+variants.manage_inventory,+variants.allow_backorder",
         })
 
         const customerPromise = medusa.store.customer
@@ -205,8 +274,20 @@ export default function ProductPage({
   const price = variant?.calculated_price?.calculated_amount || 0
   const currency =
     variant?.calculated_price?.currency_code?.toUpperCase() || "COP"
+  const stockStatus = getStockStatus(variant)
 
-  const increaseLocalQuantity = () => setQuantity((prev) => prev + 1)
+  const increaseLocalQuantity = () =>
+    setQuantity((prev) => {
+      if (
+        typeof stockStatus.inventoryQuantity === "number" &&
+        prev >= stockStatus.inventoryQuantity
+      ) {
+        return prev
+      }
+
+      return prev + 1
+    })
+
   const decreaseLocalQuantity = () =>
     setQuantity((prev) => (prev > 1 ? prev - 1 : 1))
 
@@ -214,6 +295,27 @@ export default function ProductPage({
     try {
       if (!variant?.id) {
         alert("Este producto no tiene una variante válida para compra.")
+        return
+      }
+
+      if (stockStatus.isSoldOut) {
+        alert(
+          "Este producto está agotado temporalmente. Hace parte de nuestro catálogo activo y pronto volverá a estar disponible."
+        )
+        return
+      }
+
+      if (
+        typeof stockStatus.inventoryQuantity === "number" &&
+        quantity > stockStatus.inventoryQuantity
+      ) {
+        alert(
+          `Solo hay ${stockStatus.inventoryQuantity} unidad${
+            stockStatus.inventoryQuantity === 1 ? "" : "es"
+          } disponible${
+            stockStatus.inventoryQuantity === 1 ? "" : "s"
+          } para pedido inmediato.`
+        )
         return
       }
 
@@ -262,6 +364,14 @@ export default function ProductPage({
       }
     } catch (error) {
       console.error("ERROR AGREGANDO AL CARRITO:", error)
+
+      if (isInventoryError(error)) {
+        alert(
+          "Este producto está agotado temporalmente o no cuenta con unidades suficientes para la cantidad solicitada. Pronto volverá a estar disponible."
+        )
+        return
+      }
+
       alert("No fue posible agregar el producto al carrito.")
     } finally {
       setAdding(false)
@@ -288,18 +398,28 @@ export default function ProductPage({
         </div>
 
         <div className="grid gap-10 lg:grid-cols-2">
-          <div className="overflow-hidden rounded-3xl bg-slate-100">
+          <div className="relative overflow-hidden rounded-3xl bg-slate-100">
             {image ? (
               <img
                 src={image}
                 alt={product.title}
-                className="h-full w-full object-cover"
+                className={`h-full w-full object-cover ${
+                  stockStatus.isSoldOut ? "opacity-60 grayscale" : ""
+                }`}
               />
             ) : (
               <div className="flex aspect-square items-center justify-center text-slate-400">
                 Sin imagen
               </div>
             )}
+
+            <div className="absolute left-4 top-4">
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-bold shadow-sm ${stockStatus.className}`}
+              >
+                {stockStatus.label}
+              </span>
+            </div>
           </div>
 
           <div>
@@ -314,6 +434,18 @@ export default function ProductPage({
             {product.subtitle ? (
               <p className="mt-3 text-lg text-slate-600">{product.subtitle}</p>
             ) : null}
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${stockStatus.className}`}
+              >
+                {stockStatus.label}
+              </span>
+
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                {stockStatus.helperText}
+              </p>
+            </div>
 
             <div className="mt-6">
               {customer && isApproved ? (
@@ -350,7 +482,8 @@ export default function ProductPage({
                   <div className="flex items-center gap-3">
                     <button
                       onClick={decreaseLocalQuantity}
-                      className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50"
+                      disabled={stockStatus.isSoldOut}
+                      className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       -
                     </button>
@@ -361,20 +494,38 @@ export default function ProductPage({
 
                     <button
                       onClick={increaseLocalQuantity}
-                      className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50"
+                      disabled={
+                        stockStatus.isSoldOut ||
+                        (typeof stockStatus.inventoryQuantity === "number" &&
+                          quantity >= stockStatus.inventoryQuantity)
+                      }
+                      className="h-10 w-10 rounded-xl border border-slate-300 text-lg font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       +
                     </button>
                   </div>
+
+                  {typeof stockStatus.inventoryQuantity === "number" &&
+                    stockStatus.inventoryQuantity > 0 && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Disponible para pedido inmediato:{" "}
+                        {stockStatus.inventoryQuantity} unidad
+                        {stockStatus.inventoryQuantity === 1 ? "" : "es"}.
+                      </p>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={handleAddToCart}
-                    disabled={adding}
-                    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                    disabled={adding || stockStatus.isSoldOut}
+                    className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {adding ? "Agregando..." : "Agregar al carrito"}
+                    {adding
+                      ? "Agregando..."
+                      : stockStatus.isSoldOut
+                      ? "Agotado temporalmente"
+                      : "Agregar al carrito"}
                   </button>
 
                   <Link
@@ -384,6 +535,18 @@ export default function ProductPage({
                     Ver carrito
                   </Link>
                 </div>
+
+                {stockStatus.isSoldOut && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-800">
+                      Producto agotado temporalmente
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Este título hace parte de nuestro catálogo activo. Pronto
+                      volverá a estar disponible para pedidos comerciales.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -397,19 +560,17 @@ export default function ProductPage({
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
                   Este sitio está orientado al canal comercial. Si eres cliente
-                  final, puedes consultar este producto a través de tiendas
-                  aliadas o del canal retail.
+                  final, puedes consultar este producto en los puntos de venta,
+                  tiendas aliadas o canales retail disponibles.
                 </p>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <a
-                    href="https://tiendamovitec.com"
-                    target="_blank"
-                    rel="noreferrer"
+                  <Link
+                    href="/donde-comprar"
                     className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
                   >
-                    Ir a canal retail
-                  </a>
+                    Dónde comprar
+                  </Link>
 
                   <Link
                     href="/solicitar-acceso"
