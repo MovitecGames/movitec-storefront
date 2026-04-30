@@ -7,6 +7,7 @@ import { medusa } from "../../lib/medusa"
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -62,14 +63,36 @@ export default function LoginPage() {
             autoComplete="email"
           />
 
-          <input
-            type="password"
-            placeholder="Contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded border p-3"
-            autoComplete="current-password"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded border p-3 pr-14"
+              autoComplete="current-password"
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-slate-500 hover:text-slate-900"
+              aria-label={
+                showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+              }
+            >
+              {showPassword ? "Ocultar" : "Ver"}
+            </button>
+          </div>
+
+          <div className="text-right">
+            <Link
+              href="/recuperar-contrasena"
+              className="text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
 
           <button
             type="submit"
