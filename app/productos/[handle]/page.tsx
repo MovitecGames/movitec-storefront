@@ -310,11 +310,7 @@ export default function ProductPage({
         quantity > stockStatus.inventoryQuantity
       ) {
         alert(
-          `Solo hay ${stockStatus.inventoryQuantity} unidad${
-            stockStatus.inventoryQuantity === 1 ? "" : "es"
-          } disponible${
-            stockStatus.inventoryQuantity === 1 ? "" : "s"
-          } para pedido inmediato.`
+          "La cantidad solicitada supera las unidades disponibles para pedido inmediato. Reduce la cantidad o consulta disponibilidad con Movitec Games."
         )
         return
       }
@@ -504,15 +500,6 @@ export default function ProductPage({
                       +
                     </button>
                   </div>
-
-                  {typeof stockStatus.inventoryQuantity === "number" &&
-                    stockStatus.inventoryQuantity > 0 && (
-                      <p className="mt-2 text-xs text-slate-500">
-                        Disponible para pedido inmediato:{" "}
-                        {stockStatus.inventoryQuantity} unidad
-                        {stockStatus.inventoryQuantity === 1 ? "" : "es"}.
-                      </p>
-                    )}
                 </div>
 
                 <div className="flex flex-wrap gap-3">
