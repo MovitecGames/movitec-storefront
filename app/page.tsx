@@ -248,6 +248,36 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-4">
+            <nav className="hidden items-center gap-3 xl:flex">
+              <Link
+                href="/productos"
+                className="text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+              >
+                Catálogo
+              </Link>
+
+              <Link
+                href="/categorias"
+                className="text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+              >
+                Categorías
+              </Link>
+
+              <Link
+                href="/editoriales"
+                className="text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+              >
+                Editoriales
+              </Link>
+
+              <Link
+                href="/donde-comprar"
+                className="text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+              >
+                Dónde comprar
+              </Link>
+            </nav>
+
             <Link
               href="/carrito"
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -374,6 +404,119 @@ export default function Home() {
                 </li>
               </ul>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 pt-12">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Explora Movitec Games
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight">
+                Una plataforma para descubrir, comprar y distribuir juegos de mesa modernos
+              </h2>
+              <p className="mt-3 max-w-4xl leading-7 text-slate-600">
+                Si eres jugador o cliente final, puedes explorar juegos, editoriales,
+                categorías y consultar dónde comprarlos. Si tienes una tienda,
+                librería, club o comercio especializado, puedes solicitar acceso
+                comercial para consultar condiciones B2B.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Link
+              href="/productos"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+            >
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Catálogo
+              </p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight">
+                Ver juegos disponibles
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Explora el catálogo público de juegos de mesa modernos en español.
+              </p>
+            </Link>
+
+            <Link
+              href="/categorias"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+            >
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Categorías
+              </p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight">
+                Encuentra qué tipo de juego buscar
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Familiares, party, cooperativos, estrategia, cartas, infantiles y más.
+              </p>
+            </Link>
+
+            <Link
+              href="/editoriales"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+            >
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Editoriales
+              </p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight">
+                Conoce los sellos del catálogo
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                2Tomatoes, SD Games, Tranjis Games, Arrakis Games, Delirium Games y más.
+              </p>
+            </Link>
+
+            <Link
+              href="/donde-comprar"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+            >
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Cliente final
+              </p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight">
+                Dónde comprar
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Consulta canales y puntos de venta para conseguir los juegos.
+              </p>
+            </Link>
+
+            <Link
+              href="/distribucion-b2b-juegos-de-mesa-colombia"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+            >
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                B2B
+              </p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight">
+                Distribución para tiendas
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Conoce cómo funciona Movitec Games para tiendas y comercios.
+              </p>
+            </Link>
+
+            <Link
+              href="/preguntas-frecuentes"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+            >
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Ayuda
+              </p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight">
+                Preguntas frecuentes
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Resuelve dudas como cliente final o como tienda interesada en acceso B2B.
+              </p>
+            </Link>
           </div>
         </div>
       </section>
