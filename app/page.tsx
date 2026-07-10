@@ -123,13 +123,7 @@ function getProductSearchText(product: ProductItem) {
   const collection = product.collection?.title || ""
 
   return normalizeText(
-    [
-      product.title,
-      product.subtitle,
-      tags,
-      type,
-      collection,
-    ].join(" ")
+    [product.title, product.subtitle, tags, type, collection].join(" ")
   )
 }
 
@@ -150,6 +144,54 @@ function getEditorialCount(products: ProductItem[], editorialName: string) {
   ).length
 }
 
+async function getAllProducts(): Promise<ProductItem[]> {
+  try {
+    const limit = 100
+    let offset = 0
+    let allProducts: ProductItem[] = []
+
+    while (true) {
+      const response = await medusa.store.product.list({
+        country_code: "co",
+        limit,
+        offset,
+        fields:
+          "*variants.calculated_price,+images,+tags,+type,+collection",
+      })
+
+      const pageProducts = (response.products || []) as ProductItem[]
+
+      if (!pageProducts.length) {
+        break
+      }
+
+      allProducts = [...allProducts, ...pageProducts]
+
+      const totalCount =
+        typeof response.count === "number" ? response.count : null
+
+      if (totalCount !== null && allProducts.length >= totalCount) {
+        break
+      }
+
+      if (pageProducts.length < limit) {
+        break
+      }
+
+      offset += limit
+    }
+
+    return allProducts
+  } catch (error) {
+    console.error(
+      "Error cargando todos los productos de la página inicial:",
+      error
+    )
+
+    return []
+  }
+}
+
 export default function Home() {
   const [products, setProducts] = useState<ProductItem[]>([])
   const [customer, setCustomer] = useState<CustomerItem | null>(null)
@@ -162,24 +204,19 @@ export default function Home() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const productsPromise = medusa.store.product.list({
-          country_code: "co",
-          limit: 200,
-          fields:
-            "*variants.calculated_price,+images,+tags,+type,+collection",
-        })
+        const productsPromise = getAllProducts()
 
         const customerPromise = medusa.store.customer
           .retrieve()
           .then(({ customer }) => customer)
           .catch(() => null)
 
-        const [{ products }, currentCustomer] = await Promise.all([
+        const [loadedProducts, currentCustomer] = await Promise.all([
           productsPromise,
           customerPromise,
         ])
 
-        setProducts(products || [])
+        setProducts(loadedProducts)
         setCustomer(currentCustomer)
       } catch (error) {
         console.error(error)
@@ -243,7 +280,9 @@ export default function Home() {
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Distribución B2B
               </p>
-              <h1 className="text-xl font-bold tracking-tight">Movitec Games</h1>
+              <h1 className="text-xl font-bold tracking-tight">
+                Movitec Games
+              </h1>
             </div>
           </div>
 
@@ -339,13 +378,14 @@ export default function Home() {
             </p>
 
             <h2 className="max-w-3xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-              Descubre juegos de mesa modernos y accede a nuestro canal comercial para tiendas.
+              Descubre juegos de mesa modernos y accede a nuestro canal
+              comercial para tiendas.
             </h2>
 
             <p className="mt-6 max-w-2xl text-lg text-slate-300">
-              Movitec Games conecta el catálogo con el mercado. Los visitantes pueden explorar
-              los títulos disponibles, y las tiendas aprobadas acceden a condiciones comerciales,
-              precios y operación B2B.
+              Movitec Games conecta el catálogo con el mercado. Los visitantes
+              pueden explorar los títulos disponibles, y las tiendas aprobadas
+              acceden a condiciones comerciales, precios y operación B2B.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -394,10 +434,12 @@ export default function Home() {
 
               <ul className="mt-6 space-y-4 text-sm text-slate-600">
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Público general: puede explorar el catálogo y consultar los títulos disponibles.
+                  Público general: puede explorar el catálogo y consultar los
+                  títulos disponibles.
                 </li>
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Tiendas aprobadas: pueden ingresar y acceder a precios y operación B2B.
+                  Tiendas aprobadas: pueden ingresar y acceder a precios y
+                  operación B2B.
                 </li>
                 <li className="rounded-xl bg-slate-50 p-4">
                   La habilitación comercial requiere revisión documental previa.
@@ -416,13 +458,14 @@ export default function Home() {
                 Explora Movitec Games
               </p>
               <h2 className="mt-2 text-2xl font-bold tracking-tight">
-                Una plataforma para descubrir, comprar y distribuir juegos de mesa modernos
+                Una plataforma para descubrir, comprar y distribuir juegos de
+                mesa modernos
               </h2>
               <p className="mt-3 max-w-4xl leading-7 text-slate-600">
-                Si eres jugador o cliente final, puedes explorar juegos, editoriales,
-                categorías y consultar dónde comprarlos. Si tienes una tienda,
-                librería, club o comercio especializado, puedes solicitar acceso
-                comercial para consultar condiciones B2B.
+                Si eres jugador o cliente final, puedes explorar juegos,
+                editoriales, categorías y consultar dónde comprarlos. Si tienes
+                una tienda, librería, club o comercio especializado, puedes
+                solicitar acceso comercial para consultar condiciones B2B.
               </p>
             </div>
           </div>
@@ -439,7 +482,8 @@ export default function Home() {
                 Ver juegos disponibles
               </h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Explora el catálogo público de juegos de mesa modernos en español.
+                Explora el catálogo público de juegos de mesa modernos en
+                español.
               </p>
             </Link>
 
@@ -454,7 +498,8 @@ export default function Home() {
                 Encuentra qué tipo de juego buscar
               </h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Familiares, party, cooperativos, estrategia, cartas, infantiles y más.
+                Familiares, party, cooperativos, estrategia, cartas, infantiles
+                y más.
               </p>
             </Link>
 
@@ -469,7 +514,8 @@ export default function Home() {
                 Conoce los sellos del catálogo
               </h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                2Tomatoes, SD Games, Tranjis Games, Arrakis Games, Delirium Games y más.
+                2Tomatoes, SD Games, Tranjis Games, Arrakis Games, Delirium
+                Games y más.
               </p>
             </Link>
 
@@ -514,7 +560,8 @@ export default function Home() {
                 Preguntas frecuentes
               </h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Resuelve dudas como cliente final o como tienda interesada en acceso B2B.
+                Resuelve dudas como cliente final o como tienda interesada en
+                acceso B2B.
               </p>
             </Link>
           </div>
@@ -531,8 +578,9 @@ export default function Home() {
               Tu solicitud está siendo validada
             </h3>
             <p className="mt-4 max-w-3xl text-amber-900/80">
-              Ya recibimos tu información. Una vez aprobemos tu perfil comercial, se habilitará
-              la visualización de precios y condiciones B2B dentro de la plataforma.
+              Ya recibimos tu información. Una vez aprobemos tu perfil
+              comercial, se habilitará la visualización de precios y condiciones
+              B2B dentro de la plataforma.
             </p>
           </div>
         </section>
@@ -579,7 +627,9 @@ export default function Home() {
               <p className="mt-3 text-sm font-bold">Todas las editoriales</p>
               <p
                 className={`mt-1 text-xs ${
-                  selectedEditorial === "Todos" ? "text-slate-300" : "text-slate-500"
+                  selectedEditorial === "Todos"
+                    ? "text-slate-300"
+                    : "text-slate-500"
                 }`}
               >
                 {products.length} productos
@@ -694,14 +744,19 @@ export default function Home() {
 
         {!products.length ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <p className="text-lg font-semibold">No hay productos disponibles todavía.</p>
+            <p className="text-lg font-semibold">
+              No hay productos disponibles todavía.
+            </p>
             <p className="mt-2 text-slate-500">
-              Cuando publiques productos en Medusa, aparecerán aquí automáticamente.
+              Cuando publiques productos en Medusa, aparecerán aquí
+              automáticamente.
             </p>
           </div>
         ) : !filteredProducts.length ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <p className="text-lg font-semibold">No encontramos juegos con ese filtro.</p>
+            <p className="text-lg font-semibold">
+              No encontramos juegos con ese filtro.
+            </p>
             <p className="mt-2 text-slate-500">
               Prueba con otra palabra, editorial o característica.
             </p>
@@ -710,9 +765,12 @@ export default function Home() {
           <>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visibleProducts.map((product) => {
-                const image = product.thumbnail || product.images?.[0]?.url || null
+                const image =
+                  product.thumbnail || product.images?.[0]?.url || null
+
                 const price =
                   product.variants?.[0]?.calculated_price?.calculated_amount
+
                 const currency =
                   product.variants?.[0]?.calculated_price?.currency_code?.toUpperCase() ||
                   "COP"
@@ -742,7 +800,9 @@ export default function Home() {
                       </h4>
 
                       {product.subtitle ? (
-                        <p className="mt-2 text-sm text-slate-500">{product.subtitle}</p>
+                        <p className="mt-2 text-sm text-slate-500">
+                          {product.subtitle}
+                        </p>
                       ) : (
                         <p className="mt-2 text-sm text-slate-400">
                           Producto disponible en catálogo.
@@ -763,7 +823,9 @@ export default function Home() {
                       ) : null}
 
                       <div className="mt-4">
-                        {customer && isApproved && typeof price === "number" ? (
+                        {customer &&
+                        isApproved &&
+                        typeof price === "number" ? (
                           <p className="text-lg font-bold text-slate-900">
                             {new Intl.NumberFormat("es-CO", {
                               style: "currency",
