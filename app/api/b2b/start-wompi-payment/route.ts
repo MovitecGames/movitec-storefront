@@ -22,6 +22,7 @@ function normalizeWhitespace(value: unknown) {
 
 function buildWompiReference(existing?: string, cartId?: string) {
   const normalizedExisting = normalizeWhitespace(existing)
+
   if (normalizedExisting) return normalizedExisting
 
   const now = new Date()
@@ -31,13 +32,21 @@ function buildWompiReference(existing?: string, cartId?: string) {
   const hours = String(now.getHours()).padStart(2, "0")
   const minutes = String(now.getMinutes()).padStart(2, "0")
   const seconds = String(now.getSeconds()).padStart(2, "0")
-  const suffix = normalizeWhitespace(cartId).replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase()
 
-  return `MV-WOMPI-${year}${month}${day}${hours}${minutes}${seconds}-${suffix || "CART"}`
+  const suffix = normalizeWhitespace(cartId)
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(-6)
+    .toUpperCase()
+
+  return `MV-WOMPI-${year}${month}${day}${hours}${minutes}${seconds}-${
+    suffix || "CART"
+  }`
 }
 
 function getAmountInCents(value: number) {
-  return Math.round(value * 100)
+  const roundedAmountInPesos = Math.round(value)
+
+  return roundedAmountInPesos * 100
 }
 
 function buildIntegritySignature(params: {
@@ -58,13 +67,19 @@ export async function POST(req: Request) {
 
     if (!cartId) {
       return NextResponse.json(
-        { ok: false, error: "No se recibió cartId." },
-        { status: 400 }
+        {
+          ok: false,
+          error: "No se recibió cartId.",
+        },
+        {
+          status: 400,
+        }
       )
     }
 
     const wompiPublicKey = process.env.WOMPI_PUBLIC_KEY || ""
-    const wompiIntegritySecret = process.env.WOMPI_INTEGRITY_SECRET || ""
+    const wompiIntegritySecret =
+      process.env.WOMPI_INTEGRITY_SECRET || ""
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || ""
 
     if (!wompiPublicKey || !wompiIntegritySecret || !baseUrl) {
@@ -74,7 +89,9 @@ export async function POST(req: Request) {
           error:
             "Faltan WOMPI_PUBLIC_KEY, WOMPI_INTEGRITY_SECRET o NEXT_PUBLIC_BASE_URL en variables de entorno.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       )
     }
 
@@ -84,27 +101,40 @@ export async function POST(req: Request) {
     } as any)
 
     const metadata = (cart as any)?.metadata || {}
-    const paymentMethod = String(metadata.payment_method || "").trim().toLowerCase()
+
+    const paymentMethod = String(
+      metadata.payment_method || ""
+    )
+      .trim()
+      .toLowerCase()
 
     if (paymentMethod !== "wompi") {
       return NextResponse.json(
         {
           ok: false,
-          error: "Esta ruta solo prepara pagos cuando el método seleccionado es Wompi.",
+          error:
+            "Esta ruta solo prepara pagos cuando el método seleccionado es Wompi.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       )
     }
 
-    const currency = String(cart?.currency_code || "COP").toUpperCase()
+    const currency = String(
+      cart?.currency_code || "COP"
+    ).toUpperCase()
 
     if (currency !== "COP") {
       return NextResponse.json(
         {
           ok: false,
-          error: "La integración actual de Wompi quedó preparada para COP.",
+          error:
+            "La integración actual de Wompi quedó preparada para COP.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       )
     }
 
@@ -115,19 +145,27 @@ export async function POST(req: Request) {
     )
 
     const shippingCost = getNumber(
-      metadata.checkout_shipping_cost ?? metadata.selected_shipping_price ?? 0
+      metadata.checkout_shipping_cost ??
+        metadata.selected_shipping_price ??
+        0
     )
 
     const retefuenteValue = getNumber(
-      metadata.checkout_retefuente_value ?? metadata.retefuente_value ?? 0
+      metadata.checkout_retefuente_value ??
+        metadata.retefuente_value ??
+        0
     )
 
     const icaValue = getNumber(
-      metadata.checkout_ica_value ?? metadata.ica_value ?? 0
+      metadata.checkout_ica_value ??
+        metadata.ica_value ??
+        0
     )
 
     const paymentFee = getNumber(
-      metadata.checkout_payment_fee ?? metadata.payment_fee_value ?? 0
+      metadata.checkout_payment_fee ??
+        metadata.payment_fee_value ??
+        0
     )
 
     const finalTotal = getNumber(
@@ -144,15 +182,27 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           ok: false,
-          error: "El total final del checkout no es válido para iniciar el pago.",
+          error:
+            "El total final del checkout no es válido para iniciar el pago.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       )
     }
 
     const amountInCents = getAmountInCents(finalTotal)
-    const reference = buildWompiReference(metadata.checkout_order_number, cartId)
-    const redirectUrl = `${baseUrl.replace(/\/$/, "")}/checkout/wompi/resultado`
+
+    const reference = buildWompiReference(
+      metadata.checkout_order_number,
+      cartId
+    )
+
+    const redirectUrl = `${baseUrl.replace(
+      /\/$/,
+      ""
+    )}/checkout/wompi/resultado`
+
     const integritySignature = buildIntegritySignature({
       reference,
       amountInCents,
@@ -176,24 +226,41 @@ export async function POST(req: Request) {
         customer_data: {
           email: normalizeWhitespace(cart?.email),
           full_name: normalizeWhitespace(
-            `${shippingAddress.first_name || ""} ${shippingAddress.last_name || ""}`
+            `${shippingAddress.first_name || ""} ${
+              shippingAddress.last_name || ""
+            }`
           ),
-          phone_number: normalizeWhitespace(shippingAddress.phone),
+          phone_number: normalizeWhitespace(
+            shippingAddress.phone
+          ),
         },
         shipping_address: {
-          address_line_1: normalizeWhitespace(shippingAddress.address_1),
-          country: String(shippingAddress.country_code || "CO").toUpperCase(),
-          city: normalizeWhitespace(shippingAddress.city),
-          region: normalizeWhitespace(shippingAddress.province),
-          phone_number: normalizeWhitespace(shippingAddress.phone),
-          name: normalizeWhitespace(
-            `${shippingAddress.first_name || ""} ${shippingAddress.last_name || ""}`
+          address_line_1: normalizeWhitespace(
+            shippingAddress.address_1
           ),
-          postal_code: normalizeWhitespace(shippingAddress.postal_code),
+          country: String(
+            shippingAddress.country_code || "CO"
+          ).toUpperCase(),
+          city: normalizeWhitespace(shippingAddress.city),
+          region: normalizeWhitespace(
+            shippingAddress.province
+          ),
+          phone_number: normalizeWhitespace(
+            shippingAddress.phone
+          ),
+          name: normalizeWhitespace(
+            `${shippingAddress.first_name || ""} ${
+              shippingAddress.last_name || ""
+            }`
+          ),
+          postal_code: normalizeWhitespace(
+            shippingAddress.postal_code
+          ),
         },
       },
       commercial_summary: {
-        total_with_commercial_terms: totalWithCommercialTerms,
+        total_with_commercial_terms:
+          totalWithCommercialTerms,
         shipping_cost: shippingCost,
         retefuente_value: retefuenteValue,
         ica_value: icaValue,
@@ -202,7 +269,10 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
-    console.error("[B2B_START_WOMPI_PAYMENT] unexpected error", error)
+    console.error(
+      "[B2B_START_WOMPI_PAYMENT] unexpected error",
+      error
+    )
 
     return NextResponse.json(
       {
@@ -212,7 +282,9 @@ export async function POST(req: Request) {
             ? error.message
             : "Ocurrió un error iniciando el pago con Wompi.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     )
   }
 }
