@@ -8,30 +8,93 @@ function normalizeDestinationAddress(value: string) {
   return normalizeWhitespace(value).replace(/\bNo\b\.?/gi, "#")
 }
 
+function getGoogleErrorMessage(data: any) {
+  const googleStatus = String(data?.status || "").trim()
+  const googleErrorMessage = String(data?.error_message || "").trim()
+
+  if (googleErrorMessage) {
+    return googleErrorMessage
+  }
+
+  if (googleStatus === "REQUEST_DENIED") {
+    return "Google Maps rechazó la consulta. Revisa que Distance Matrix API esté habilitada, que la facturación esté activa y que la llave permita solicitudes desde el servidor."
+  }
+
+  if (googleStatus === "OVER_DAILY_LIMIT") {
+    return "Google Maps rechazó la consulta por límites, facturación o configuración de la llave."
+  }
+
+  if (googleStatus === "OVER_QUERY_LIMIT") {
+    return "Se superó temporalmente la cuota de consultas de Google Maps."
+  }
+
+  if (googleStatus === "INVALID_REQUEST") {
+    return "Google Maps recibió una solicitud incompleta o inválida."
+  }
+
+  if (googleStatus === "UNKNOWN_ERROR") {
+    return "Google Maps presentó un error temporal. Intenta nuevamente."
+  }
+
+  return `Google Maps devolvió el estado ${googleStatus || "desconocido"}.`
+}
+
+function getElementErrorMessage(elementStatus: string) {
+  if (elementStatus === "NOT_FOUND") {
+    return "Google Maps no pudo localizar el origen o la dirección de destino."
+  }
+
+  if (elementStatus === "ZERO_RESULTS") {
+    return "Google Maps localizó la dirección, pero no encontró una ruta vehicular válida."
+  }
+
+  if (elementStatus === "MAX_ROUTE_LENGTH_EXCEEDED") {
+    return "La ruta solicitada supera la longitud admitida por Google Maps."
+  }
+
+  return `Google Maps no pudo calcular la ruta. Estado: ${
+    elementStatus || "desconocido"
+  }.`
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
     const rawAddress = String(body?.address || "").trim()
 
     if (!rawAddress) {
       return NextResponse.json(
-        { error: "Debes enviar una dirección válida." },
+        {
+          ok: false,
+          error: "Debes enviar una dirección válida.",
+        },
         { status: 400 }
       )
     }
 
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY
-    const originAddress = process.env.BOGOTA_ORIGIN_ADDRESS
+    const apiKey = String(process.env.GOOGLE_MAPS_API_KEY || "").trim()
+    const originAddress = String(
+      process.env.BOGOTA_ORIGIN_ADDRESS || ""
+    ).trim()
 
     if (!apiKey || !originAddress) {
+      console.error("[BOGOTA_DISTANCE] missing environment variables", {
+        hasGoogleMapsApiKey: Boolean(apiKey),
+        hasBogotaOriginAddress: Boolean(originAddress),
+      })
+
       return NextResponse.json(
-        { error: "Faltan variables de entorno para Google Maps." },
+        {
+          ok: false,
+          error: "Faltan variables de entorno para Google Maps.",
+        },
         { status: 500 }
       )
     }
 
     const normalizedOrigin = normalizeWhitespace(originAddress)
-    const normalizedDestination = normalizeDestinationAddress(rawAddress)
+    const normalizedDestination =
+      normalizeDestinationAddress(rawAddress)
 
     const origin = encodeURIComponent(normalizedOrigin)
     const destination = encodeURIComponent(normalizedDestination)
@@ -43,19 +106,21 @@ export async function POST(req: NextRequest) {
       `&mode=driving` +
       `&language=es-419` +
       `&region=co` +
-      `&key=${apiKey}`
+      `&key=${encodeURIComponent(apiKey)}`
 
-    console.log("[BOGOTA_DISTANCE] origin:", normalizedOrigin)
-    console.log("[BOGOTA_DISTANCE] destination:", normalizedDestination)
+    console.log("[BOGOTA_DISTANCE] request", {
+      origin: normalizedOrigin,
+      destination: normalizedDestination,
+    })
 
     const response = await fetch(url, {
       method: "GET",
       cache: "no-store",
     })
 
-    if (!response.ok) {
-      const responseText = await response.text().catch(() => "")
+    const responseText = await response.text().catch(() => "")
 
+    if (!response.ok) {
       console.error("[BOGOTA_DISTANCE] google http error", {
         status: response.status,
         statusText: response.statusText,
@@ -64,48 +129,93 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json(
         {
+          ok: false,
           error: "No fue posible consultar Google Maps.",
           google_http_status: response.status,
+          google_http_status_text: response.statusText,
         },
         { status: 502 }
       )
     }
 
-    const data = await response.json()
+    let data: any = null
 
-    if (data?.status && data.status !== "OK") {
+    try {
+      data = responseText ? JSON.parse(responseText) : null
+    } catch (parseError) {
+      console.error("[BOGOTA_DISTANCE] invalid google json", {
+        parseError,
+        body: responseText,
+      })
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Google Maps devolvió una respuesta inválida.",
+        },
+        { status: 502 }
+      )
+    }
+
+    const googleStatus = String(data?.status || "").trim()
+
+    if (googleStatus !== "OK") {
+      const googleErrorMessage = String(
+        data?.error_message || ""
+      ).trim()
+
       console.error("[BOGOTA_DISTANCE] google api status error", {
-        status: data.status,
+        status: googleStatus,
+        errorMessage: googleErrorMessage,
         origin: normalizedOrigin,
         destination: normalizedDestination,
       })
 
       return NextResponse.json(
         {
-          error: "Google Maps devolvió un estado inválido para la consulta.",
-          google_status: data.status,
+          ok: false,
+          error: getGoogleErrorMessage(data),
+          google_status: googleStatus || null,
+          google_error_message: googleErrorMessage || null,
+          originAddress: normalizedOrigin,
+          destinationAddress: normalizedDestination,
         },
         { status: 400 }
       )
     }
 
+    const originAddresses = Array.isArray(data?.origin_addresses)
+      ? data.origin_addresses
+      : []
+
+    const destinationAddresses = Array.isArray(
+      data?.destination_addresses
+    )
+      ? data.destination_addresses
+      : []
+
     const element = data?.rows?.[0]?.elements?.[0]
-    const elementStatus = element?.status
+    const elementStatus = String(element?.status || "").trim()
 
     if (elementStatus !== "OK") {
       console.error("[BOGOTA_DISTANCE] google element status error", {
         elementStatus,
         origin: normalizedOrigin,
         destination: normalizedDestination,
+        resolvedOrigin: originAddresses[0] || "",
+        resolvedDestination: destinationAddresses[0] || "",
       })
 
       return NextResponse.json(
         {
-          error:
-            "Google Maps no pudo calcular la distancia para esa dirección.",
+          ok: false,
+          error: getElementErrorMessage(elementStatus),
           google_status: elementStatus || null,
           originAddress: normalizedOrigin,
           destinationAddress: normalizedDestination,
+          resolvedOriginAddress: originAddresses[0] || null,
+          resolvedDestinationAddress:
+            destinationAddresses[0] || null,
         },
         { status: 400 }
       )
@@ -116,6 +226,27 @@ export async function POST(req: NextRequest) {
     const distanceText = String(element?.distance?.text || "")
     const durationText = String(element?.duration?.text || "")
 
+    if (
+      !Number.isFinite(distanceMeters) ||
+      distanceMeters <= 0 ||
+      !Number.isFinite(durationSeconds)
+    ) {
+      console.error("[BOGOTA_DISTANCE] invalid distance result", {
+        distanceMeters,
+        durationSeconds,
+        element,
+      })
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Google Maps respondió correctamente, pero no entregó una distancia válida.",
+        },
+        { status: 502 }
+      )
+    }
+
     return NextResponse.json({
       ok: true,
       distanceMeters,
@@ -123,14 +254,22 @@ export async function POST(req: NextRequest) {
       durationSeconds,
       distanceText,
       durationText,
-      originAddress: normalizedOrigin,
-      destinationAddress: normalizedDestination,
+      originAddress:
+        originAddresses[0] || normalizedOrigin,
+      destinationAddress:
+        destinationAddresses[0] || normalizedDestination,
     })
   } catch (error) {
     console.error("[BOGOTA_DISTANCE] unexpected error", error)
 
     return NextResponse.json(
-      { error: "Ocurrió un error calculando la distancia de Bogotá." },
+      {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Ocurrió un error calculando la distancia de Bogotá.",
+      },
       { status: 500 }
     )
   }

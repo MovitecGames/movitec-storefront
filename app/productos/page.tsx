@@ -4,6 +4,9 @@ import ProductListClient, {
   type ProductListItem,
 } from "../../components/productos/ProductListClient"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export const metadata: Metadata = {
   title: "Catálogo B2B de juegos de mesa modernos en Colombia",
   description:
@@ -125,6 +128,7 @@ export default async function ProductsPage() {
           __html: JSON.stringify(catalogSchema),
         }}
       />
+
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
