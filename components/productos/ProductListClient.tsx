@@ -3,6 +3,16 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { medusa } from "../../lib/medusa"
+import {
+  createCart,
+  createLineItem,
+  retrieveCart,
+} from "../../lib/medusa-cart"
+import {
+  getStoredCartId,
+  setStoredCartId,
+  clearStoredCheckoutState,
+} from "../../lib/cart-storage"
 
 export type ProductListItem = {
   id: string
@@ -24,6 +34,7 @@ export type ProductListItem = {
     title?: string
   } | null
   variants?: {
+    id: string
     inventory_quantity?: number | null
     manage_inventory?: boolean | null
     allow_backorder?: boolean | null
@@ -40,6 +51,16 @@ type CustomerItem = {
     approved?: boolean
   } | null
 }
+
+type CatalogReturnState = {
+  pathname: "/productos"
+  searchQuery: string
+  selectedEditorial: string
+  selectedTag: string
+  scrollY: number
+}
+
+const CATALOG_RETURN_STATE_KEY = "movitec_catalog_return_state"
 
 const EDITORIALS = [
   {
@@ -112,6 +133,31 @@ const QUICK_TAGS = [
   "4 a 10 jugadores",
 ]
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error || "")
+}
+
+function isCompletedCartError(error: unknown) {
+  return getErrorMessage(error).toLowerCase().includes("already completed")
+}
+
+function isInventoryError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase()
+
+  return (
+    message.includes("required inventory") ||
+    message.includes("does not have the required inventory") ||
+    message.includes("insufficient inventory") ||
+    message.includes("not enough inventory") ||
+    message.includes("out of stock")
+  )
+}
+
+function clearStoredCartState() {
+  clearStoredCheckoutState()
+}
+
 function normalizeText(value: unknown) {
   return String(value || "")
     .toLowerCase()
@@ -130,8 +176,12 @@ function getProductSearchText(product: ProductListItem) {
   )
 }
 
-function productMatchesEditorial(product: ProductListItem, editorialName: string) {
+function productMatchesEditorial(
+  product: ProductListItem,
+  editorialName: string
+) {
   const editorial = EDITORIALS.find((item) => item.name === editorialName)
+
   if (!editorial) return false
 
   const searchText = getProductSearchText(product)
@@ -141,7 +191,10 @@ function productMatchesEditorial(product: ProductListItem, editorialName: string
   )
 }
 
-function getEditorialCount(products: ProductListItem[], editorialName: string) {
+function getEditorialCount(
+  products: ProductListItem[],
+  editorialName: string
+) {
   return products.filter((product) =>
     productMatchesEditorial(product, editorialName)
   ).length
@@ -151,12 +204,16 @@ function getProductInventoryQuantity(product: ProductListItem) {
   const inventoryQuantities =
     product.variants
       ?.map((variant) => variant.inventory_quantity)
-      .filter((quantity): quantity is number => typeof quantity === "number") ||
-    []
+      .filter(
+        (quantity): quantity is number => typeof quantity === "number"
+      ) || []
 
   if (!inventoryQuantities.length) return null
 
-  return inventoryQuantities.reduce((total, quantity) => total + quantity, 0)
+  return inventoryQuantities.reduce(
+    (total, quantity) => total + quantity,
+    0
+  )
 }
 
 function getProductStockStatus(product: ProductListItem) {
@@ -184,7 +241,8 @@ function getProductStockStatus(product: ProductListItem) {
   if (inventoryQuantity <= 5) {
     return {
       label: "Pocas unidades",
-      helperText: "Quedan pocas unidades disponibles para pedido inmediato.",
+      helperText:
+        "Quedan pocas unidades disponibles para pedido inmediato.",
       className: "border-amber-200 bg-amber-50 text-amber-700",
       isSoldOut: false,
     }
@@ -209,6 +267,46 @@ export default function ProductListClient({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedEditorial, setSelectedEditorial] = useState("Todos")
   const [selectedTag, setSelectedTag] = useState("Todos")
+  const [addingProductId, setAddingProductId] = useState<string | null>(
+    null
+  )
+
+  useEffect(() => {
+    try {
+      const storedState = window.sessionStorage.getItem(
+        CATALOG_RETURN_STATE_KEY
+      )
+
+      if (!storedState) return
+
+      const parsedState = JSON.parse(storedState) as CatalogReturnState
+
+      if (parsedState.pathname !== "/productos") return
+
+      setSearchQuery(parsedState.searchQuery || "")
+      setSelectedEditorial(parsedState.selectedEditorial || "Todos")
+      setSelectedTag(parsedState.selectedTag || "Todos")
+
+      window.setTimeout(() => {
+        window.scrollTo({
+          top:
+            typeof parsedState.scrollY === "number"
+              ? parsedState.scrollY
+              : 0,
+          behavior: "auto",
+        })
+
+        window.sessionStorage.removeItem(CATALOG_RETURN_STATE_KEY)
+      }, 100)
+    } catch (error) {
+      console.error(
+        "Error restaurando el estado del catálogo:",
+        error
+      )
+
+      window.sessionStorage.removeItem(CATALOG_RETURN_STATE_KEY)
+    }
+  }, [])
 
   useEffect(() => {
     const loadCustomer = async () => {
@@ -227,6 +325,120 @@ export default function ProductListClient({
     loadCustomer()
   }, [])
 
+  const saveCatalogReturnState = () => {
+    const state: CatalogReturnState = {
+      pathname: "/productos",
+      searchQuery,
+      selectedEditorial,
+      selectedTag,
+      scrollY: window.scrollY,
+    }
+
+    window.sessionStorage.setItem(
+      CATALOG_RETURN_STATE_KEY,
+      JSON.stringify(state)
+    )
+  }
+
+  const ensureValidCartId = async () => {
+    let cartId = getStoredCartId()
+
+    if (!cartId) {
+      const created = await createCart()
+      const newCartId = created?.cart?.id
+
+      if (!newCartId) {
+        throw new Error("No fue posible crear el carrito.")
+      }
+
+      setStoredCartId(newCartId)
+
+      return newCartId
+    }
+
+    try {
+      await retrieveCart(cartId)
+
+      return cartId
+    } catch (error) {
+      if (isCompletedCartError(error)) {
+        clearStoredCartState()
+      }
+
+      const created = await createCart()
+      const newCartId = created?.cart?.id
+
+      if (!newCartId) {
+        throw new Error("No fue posible crear un carrito nuevo.")
+      }
+
+      setStoredCartId(newCartId)
+
+      return newCartId
+    }
+  }
+
+  const handleAddToCart = async (product: ProductListItem) => {
+    try {
+      const variant = product.variants?.[0]
+      const stockStatus = getProductStockStatus(product)
+
+      if (!variant?.id) {
+        alert("Este producto no tiene una variante válida para compra.")
+        return
+      }
+
+      if (stockStatus.isSoldOut) {
+        alert(
+          "Este producto está agotado temporalmente. Hace parte de nuestro catálogo activo y pronto volverá a estar disponible."
+        )
+        return
+      }
+
+      setAddingProductId(product.id)
+
+      let cartId = await ensureValidCartId()
+
+      try {
+        await createLineItem(cartId, {
+          variant_id: variant.id,
+          quantity: 1,
+        })
+
+        alert("Producto agregado al carrito.")
+      } catch (error) {
+        if (isCompletedCartError(error)) {
+          clearStoredCartState()
+
+          cartId = await ensureValidCartId()
+
+          await createLineItem(cartId, {
+            variant_id: variant.id,
+            quantity: 1,
+          })
+
+          alert("Producto agregado al carrito.")
+          return
+        }
+
+        throw error
+      }
+    } catch (error) {
+      console.error("ERROR AGREGANDO AL CARRITO:", error)
+
+      if (isInventoryError(error)) {
+        alert(
+          "Este producto está agotado temporalmente o no cuenta con unidades suficientes para la cantidad solicitada. Pronto volverá a estar disponible."
+        )
+        return
+      }
+
+      alert("No fue posible agregar el producto al carrito.")
+    } finally {
+      setAddingProductId(null)
+    }
+  }
+
   const isApproved = customer?.metadata?.approved === true
 
   const filteredProducts = useMemo(() => {
@@ -244,7 +456,8 @@ export default function ProductListClient({
         productMatchesEditorial(product, selectedEditorial)
 
       const matchesTag =
-        selectedTag === "Todos" || searchText.includes(normalizedTag)
+        selectedTag === "Todos" ||
+        searchText.includes(normalizedTag)
 
       return matchesSearch && matchesEditorial && matchesTag
     })
@@ -267,7 +480,10 @@ export default function ProductListClient({
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Catálogo completo
               </p>
-              <h1 className="text-xl font-bold tracking-tight">Movitec Games</h1>
+
+              <h1 className="text-xl font-bold tracking-tight">
+                Movitec Games
+              </h1>
             </div>
           </div>
 
@@ -305,6 +521,7 @@ export default function ProductListClient({
             ) : (
               <div className="text-right">
                 <p className="text-sm font-medium">{customer.email}</p>
+
                 <p className="text-xs text-slate-500">
                   {isApproved ? "Cuenta aprobada" : "Cuenta en revisión"}
                 </p>
@@ -325,9 +542,9 @@ export default function ProductListClient({
           </h2>
 
           <p className="mt-5 max-w-3xl text-lg text-slate-300">
-            Encuentra juegos por nombre, editorial, cantidad de jugadores, tipo de experiencia
-            o características comerciales. Los precios siguen visibles únicamente para clientes
-            autorizados.
+            Encuentra juegos por nombre, editorial, cantidad de jugadores,
+            tipo de experiencia o características comerciales. Los precios
+            siguen visibles únicamente para clientes autorizados.
           </p>
         </div>
       </section>
@@ -339,6 +556,7 @@ export default function ProductListClient({
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Filtros
               </p>
+
               <h3 className="mt-2 text-2xl font-bold tracking-tight">
                 Busca y organiza el catálogo
               </h3>
@@ -362,10 +580,13 @@ export default function ProductListClient({
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Buscar juego
               </label>
+
               <input
                 type="search"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) =>
+                  setSearchQuery(event.target.value)
+                }
                 placeholder="Buscar por nombre, editorial, tag o característica..."
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
               />
@@ -375,12 +596,18 @@ export default function ProductListClient({
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Filtrar por característica
               </label>
+
               <select
                 value={selectedTag}
-                onChange={(event) => setSelectedTag(event.target.value)}
+                onChange={(event) =>
+                  setSelectedTag(event.target.value)
+                }
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
               >
-                <option value="Todos">Todas las características</option>
+                <option value="Todos">
+                  Todas las características
+                </option>
+
                 {QUICK_TAGS.map((tag) => (
                   <option key={tag} value={tag}>
                     {tag}
@@ -401,12 +628,18 @@ export default function ProductListClient({
               }`}
             >
               <div className="flex h-16 items-center justify-center rounded-xl bg-white p-3">
-                <span className="text-sm font-bold text-slate-900">Todos</span>
+                <span className="text-sm font-bold text-slate-900">
+                  Todos
+                </span>
               </div>
+
               <p className="mt-3 text-sm font-bold">Todas</p>
+
               <p
                 className={`mt-1 text-xs ${
-                  selectedEditorial === "Todos" ? "text-slate-300" : "text-slate-500"
+                  selectedEditorial === "Todos"
+                    ? "text-slate-300"
+                    : "text-slate-500"
                 }`}
               >
                 {products.length} productos
@@ -414,13 +647,18 @@ export default function ProductListClient({
             </button>
 
             {EDITORIALS.map((editorial) => {
-              const count = getEditorialCount(products, editorial.name)
+              const count = getEditorialCount(
+                products,
+                editorial.name
+              )
 
               return (
                 <button
                   key={editorial.name}
                   type="button"
-                  onClick={() => setSelectedEditorial(editorial.name)}
+                  onClick={() =>
+                    setSelectedEditorial(editorial.name)
+                  }
                   className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
                     selectedEditorial === editorial.name
                       ? "border-slate-900 bg-slate-900 text-white"
@@ -434,7 +672,11 @@ export default function ProductListClient({
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>
-                  <p className="mt-3 text-sm font-bold">{editorial.name}</p>
+
+                  <p className="mt-3 text-sm font-bold">
+                    {editorial.name}
+                  </p>
+
                   <p
                     className={`mt-1 text-xs ${
                       selectedEditorial === editorial.name
@@ -474,6 +716,7 @@ export default function ProductListClient({
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
               Resultados
             </p>
+
             <h3 className="mt-2 text-3xl font-bold tracking-tight">
               Catálogo completo
             </h3>
@@ -486,14 +729,21 @@ export default function ProductListClient({
 
         {!products.length ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <p className="text-lg font-semibold">No hay productos disponibles todavía.</p>
+            <p className="text-lg font-semibold">
+              No hay productos disponibles todavía.
+            </p>
+
             <p className="mt-2 text-slate-500">
-              Cuando publiques productos en Medusa, aparecerán aquí automáticamente.
+              Cuando publiques productos en Medusa, aparecerán aquí
+              automáticamente.
             </p>
           </div>
         ) : !filteredProducts.length ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <p className="text-lg font-semibold">No encontramos juegos con ese filtro.</p>
+            <p className="text-lg font-semibold">
+              No encontramos juegos con ese filtro.
+            </p>
+
             <p className="mt-2 text-slate-500">
               Prueba con otra palabra, editorial o característica.
             </p>
@@ -501,12 +751,19 @@ export default function ProductListClient({
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredProducts.map((product) => {
-              const image = product.thumbnail || product.images?.[0]?.url || null
+              const image =
+                product.thumbnail ||
+                product.images?.[0]?.url ||
+                null
+
               const price =
-                product.variants?.[0]?.calculated_price?.calculated_amount
+                product.variants?.[0]?.calculated_price
+                  ?.calculated_amount
+
               const currency =
                 product.variants?.[0]?.calculated_price?.currency_code?.toUpperCase() ||
                 "COP"
+
               const stockStatus = getProductStockStatus(product)
 
               return (
@@ -520,7 +777,9 @@ export default function ProductListClient({
                         src={image}
                         alt={`${product.title} juego de mesa moderno en Colombia`}
                         className={`h-full w-full object-cover ${
-                          stockStatus.isSoldOut ? "opacity-60 grayscale" : ""
+                          stockStatus.isSoldOut
+                            ? "opacity-60 grayscale"
+                            : ""
                         }`}
                       />
                     ) : (
@@ -544,7 +803,9 @@ export default function ProductListClient({
                     </h4>
 
                     {product.subtitle ? (
-                      <p className="mt-2 text-sm text-slate-500">{product.subtitle}</p>
+                      <p className="mt-2 text-sm text-slate-500">
+                        {product.subtitle}
+                      </p>
                     ) : (
                       <p className="mt-2 text-sm text-slate-400">
                         Producto disponible en catálogo.
@@ -569,7 +830,9 @@ export default function ProductListClient({
                     ) : null}
 
                     <div className="mt-4">
-                      {customer && isApproved && typeof price === "number" ? (
+                      {customer &&
+                      isApproved &&
+                      typeof price === "number" ? (
                         <p className="text-lg font-bold text-slate-900">
                           {new Intl.NumberFormat("es-CO", {
                             style: "currency",
@@ -584,10 +847,11 @@ export default function ProductListClient({
                       )}
                     </div>
 
-                    <div className="mt-5 flex gap-2">
+                    <div className="mt-5 flex flex-wrap gap-2">
                       {product.handle ? (
                         <Link
                           href={`/productos/${product.handle}`}
+                          onClick={saveCatalogReturnState}
                           className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                         >
                           Ver producto
@@ -599,9 +863,21 @@ export default function ProductListClient({
                       )}
 
                       {customer && isApproved && (
-                        <span className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500">
-                          Aprobado
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCart(product)}
+                          disabled={
+                            addingProductId === product.id ||
+                            stockStatus.isSoldOut
+                          }
+                          className="inline-flex rounded-xl border border-slate-900 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {addingProductId === product.id
+                            ? "Agregando..."
+                            : stockStatus.isSoldOut
+                              ? "Agotado"
+                              : "Añadir al carrito"}
+                        </button>
                       )}
 
                       {customer && !isApproved && (

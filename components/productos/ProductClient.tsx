@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { medusa } from "../../lib/medusa"
 import {
@@ -56,6 +57,16 @@ type CustomerItem = {
 type CartItem = {
   quantity?: number
 }
+
+type CatalogReturnState = {
+  pathname: "/productos"
+  searchQuery: string
+  selectedEditorial: string
+  selectedTag: string
+  scrollY: number
+}
+
+const CATALOG_RETURN_STATE_KEY = "movitec_catalog_return_state"
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message
@@ -140,11 +151,50 @@ export default function ProductClient({
 }: {
   initialProduct: ProductItem
 }) {
+  const router = useRouter()
+
   const [product] = useState<ProductItem>(initialProduct)
   const [customer, setCustomer] = useState<CustomerItem | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [cartCount, setCartCount] = useState(0)
   const [adding, setAdding] = useState(false)
+
+  const handleBackToCatalog = () => {
+    try {
+      const storedState = window.sessionStorage.getItem(
+        CATALOG_RETURN_STATE_KEY
+      )
+
+      if (storedState) {
+        const parsedState = JSON.parse(storedState) as CatalogReturnState
+
+        if (parsedState.pathname === "/productos") {
+          router.push("/productos")
+          return
+        }
+      }
+    } catch (error) {
+      console.error("Error recuperando el origen del catálogo:", error)
+      window.sessionStorage.removeItem(CATALOG_RETURN_STATE_KEY)
+    }
+
+    try {
+      const referrer = document.referrer
+
+      if (referrer) {
+        const referrerUrl = new URL(referrer)
+
+        if (referrerUrl.origin === window.location.origin) {
+          router.back()
+          return
+        }
+      }
+    } catch (error) {
+      console.error("Error validando la página anterior:", error)
+    }
+
+    router.push("/productos")
+  }
 
   const syncCartCount = async (cartId: string) => {
     try {
@@ -344,12 +394,13 @@ export default function ProductClient({
     <main className="min-h-screen bg-neutral-50 text-slate-900">
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={handleBackToCatalog}
             className="inline-flex text-sm font-medium text-slate-500 hover:text-slate-900"
           >
             ← Volver al catálogo
-          </Link>
+          </button>
 
           <Link
             href="/carrito"
@@ -394,7 +445,9 @@ export default function ProductClient({
             </h1>
 
             {product.subtitle ? (
-              <p className="mt-3 text-lg text-slate-600">{product.subtitle}</p>
+              <p className="mt-3 text-lg text-slate-600">
+                {product.subtitle}
+              </p>
             ) : null}
 
             <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
@@ -430,6 +483,7 @@ export default function ProductClient({
                 <h2 className="text-lg font-semibold">
                   Descripción de {product.title}
                 </h2>
+
                 <p className="mt-2 whitespace-pre-line text-slate-600">
                   {product.description}
                 </p>
@@ -439,10 +493,12 @@ export default function ProductClient({
                 <h2 className="text-lg font-semibold">
                   {product.title} en Movitec Games
                 </h2>
+
                 <p className="mt-2 text-slate-600">
                   {product.title} hace parte del catálogo B2B de Movitec Games,
-                  distribuidor de juegos de mesa modernos en español para tiendas,
-                  librerías, clubes y comercios especializados en Colombia.
+                  distribuidor de juegos de mesa modernos en español para
+                  tiendas, librerías, clubes y comercios especializados en
+                  Colombia.
                 </p>
               </div>
             )}
@@ -490,8 +546,8 @@ export default function ProductClient({
                     {adding
                       ? "Agregando..."
                       : stockStatus.isSoldOut
-                      ? "Agotado temporalmente"
-                      : "Agregar al carrito"}
+                        ? "Agotado temporalmente"
+                        : "Agregar al carrito"}
                   </button>
 
                   <Link
@@ -507,6 +563,7 @@ export default function ProductClient({
                     <p className="text-sm font-semibold text-slate-800">
                       Producto agotado temporalmente
                     </p>
+
                     <p className="mt-2 text-sm leading-6 text-slate-600">
                       Este título hace parte de nuestro catálogo activo. Pronto
                       volverá a estar disponible para pedidos comerciales.
@@ -521,9 +578,11 @@ export default function ProductClient({
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Público general
                 </p>
+
                 <h2 className="mt-3 text-xl font-bold tracking-tight">
                   ¿Te interesa este juego?
                 </h2>
+
                 <p className="mt-3 text-sm leading-6 text-slate-600">
                   Este sitio está orientado al canal comercial. Si eres cliente
                   final, puedes consultar este producto en los puntos de venta,
@@ -553,9 +612,11 @@ export default function ProductClient({
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                   Cuenta en revisión
                 </p>
+
                 <h2 className="mt-3 text-xl font-bold tracking-tight text-amber-900">
                   Tu perfil comercial aún no está aprobado
                 </h2>
+
                 <p className="mt-3 text-sm leading-6 text-amber-900/80">
                   Ya registramos tu solicitud. Una vez validemos tu
                   documentación, se habilitarán precios y condiciones B2B para
@@ -569,9 +630,11 @@ export default function ProductClient({
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Cliente autorizado
                 </p>
+
                 <h2 className="mt-3 text-xl font-bold tracking-tight">
                   Acceso comercial habilitado
                 </h2>
+
                 <p className="mt-3 text-sm leading-6 text-slate-600">
                   Tu cuenta ya tiene acceso comercial. Ya puedes ir construyendo
                   tu pedido desde el carrito B2B.

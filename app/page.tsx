@@ -3,6 +3,16 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { medusa } from "../lib/medusa"
+import {
+  createCart,
+  createLineItem,
+  retrieveCart,
+} from "../lib/medusa-cart"
+import {
+  getStoredCartId,
+  setStoredCartId,
+  clearStoredCheckoutState,
+} from "../lib/cart-storage"
 
 type ProductItem = {
   id: string
@@ -24,6 +34,10 @@ type ProductItem = {
     title?: string
   } | null
   variants?: {
+    id: string
+    inventory_quantity?: number | null
+    manage_inventory?: boolean | null
+    allow_backorder?: boolean | null
     calculated_price?: {
       calculated_amount?: number
       currency_code?: string
@@ -109,6 +123,55 @@ const QUICK_TAGS = [
   "4 a 10 jugadores",
 ]
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error || "")
+}
+
+function isCompletedCartError(error: unknown) {
+  return getErrorMessage(error).toLowerCase().includes("already completed")
+}
+
+function isInventoryError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase()
+
+  return (
+    message.includes("required inventory") ||
+    message.includes("does not have the required inventory") ||
+    message.includes("insufficient inventory") ||
+    message.includes("not enough inventory") ||
+    message.includes("out of stock")
+  )
+}
+
+function clearStoredCartState() {
+  clearStoredCheckoutState()
+}
+
+function getProductInventoryQuantity(product: ProductItem) {
+  const inventoryQuantities =
+    product.variants
+      ?.map((variant) => variant.inventory_quantity)
+      .filter((quantity): quantity is number => typeof quantity === "number") ||
+    []
+
+  if (!inventoryQuantities.length) return null
+
+  return inventoryQuantities.reduce(
+    (total, quantity) => total + quantity,
+    0
+  )
+}
+
+function getProductStockStatus(product: ProductItem) {
+  const inventoryQuantity = getProductInventoryQuantity(product)
+
+  return {
+    isSoldOut:
+      typeof inventoryQuantity === "number" && inventoryQuantity <= 0,
+  }
+}
+
 function normalizeText(value: unknown) {
   return String(value || "")
     .toLowerCase()
@@ -127,8 +190,14 @@ function getProductSearchText(product: ProductItem) {
   )
 }
 
-function productMatchesEditorial(product: ProductItem, editorialName: string) {
-  const editorial = EDITORIALS.find((item) => item.name === editorialName)
+function productMatchesEditorial(
+  product: ProductItem,
+  editorialName: string
+) {
+  const editorial = EDITORIALS.find(
+    (item) => item.name === editorialName
+  )
+
   if (!editorial) return false
 
   const searchText = getProductSearchText(product)
@@ -138,7 +207,10 @@ function productMatchesEditorial(product: ProductItem, editorialName: string) {
   )
 }
 
-function getEditorialCount(products: ProductItem[], editorialName: string) {
+function getEditorialCount(
+  products: ProductItem[],
+  editorialName: string
+) {
   return products.filter((product) =>
     productMatchesEditorial(product, editorialName)
   ).length
@@ -156,7 +228,7 @@ async function getAllProducts(): Promise<ProductItem[]> {
         limit,
         offset,
         fields:
-          "*variants.calculated_price,+images,+tags,+type,+collection",
+          "*variants.calculated_price,+variants.inventory_quantity,+variants.manage_inventory,+variants.allow_backorder,+images,+tags,+type,+collection",
       })
 
       const pageProducts = (response.products || []) as ProductItem[]
@@ -200,6 +272,9 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedEditorial, setSelectedEditorial] = useState("Todos")
   const [selectedTag, setSelectedTag] = useState("Todos")
+  const [addingProductId, setAddingProductId] = useState<string | null>(
+    null
+  )
 
   useEffect(() => {
     const loadData = async () => {
@@ -228,6 +303,102 @@ export default function Home() {
     loadData()
   }, [])
 
+  const ensureValidCartId = async () => {
+    let cartId = getStoredCartId()
+
+    if (!cartId) {
+      const created = await createCart()
+      const newCartId = created?.cart?.id
+
+      if (!newCartId) {
+        throw new Error("No fue posible crear el carrito.")
+      }
+
+      setStoredCartId(newCartId)
+      return newCartId
+    }
+
+    try {
+      await retrieveCart(cartId)
+      return cartId
+    } catch (error) {
+      if (isCompletedCartError(error)) {
+        clearStoredCartState()
+      }
+
+      const created = await createCart()
+      const newCartId = created?.cart?.id
+
+      if (!newCartId) {
+        throw new Error("No fue posible crear un carrito nuevo.")
+      }
+
+      setStoredCartId(newCartId)
+      return newCartId
+    }
+  }
+
+  const handleAddToCart = async (product: ProductItem) => {
+    try {
+      const variant = product.variants?.[0]
+      const stockStatus = getProductStockStatus(product)
+
+      if (!variant?.id) {
+        alert("Este producto no tiene una variante válida para compra.")
+        return
+      }
+
+      if (stockStatus.isSoldOut) {
+        alert(
+          "Este producto está agotado temporalmente. Hace parte de nuestro catálogo activo y pronto volverá a estar disponible."
+        )
+        return
+      }
+
+      setAddingProductId(product.id)
+
+      let cartId = await ensureValidCartId()
+
+      try {
+        await createLineItem(cartId, {
+          variant_id: variant.id,
+          quantity: 1,
+        })
+
+        alert("Producto agregado al carrito.")
+      } catch (error) {
+        if (isCompletedCartError(error)) {
+          clearStoredCartState()
+
+          cartId = await ensureValidCartId()
+
+          await createLineItem(cartId, {
+            variant_id: variant.id,
+            quantity: 1,
+          })
+
+          alert("Producto agregado al carrito.")
+          return
+        }
+
+        throw error
+      }
+    } catch (error) {
+      console.error("ERROR AGREGANDO AL CARRITO:", error)
+
+      if (isInventoryError(error)) {
+        alert(
+          "Este producto está agotado temporalmente o no cuenta con unidades suficientes para la cantidad solicitada. Pronto volverá a estar disponible."
+        )
+        return
+      }
+
+      alert("No fue posible agregar el producto al carrito.")
+    } finally {
+      setAddingProductId(null)
+    }
+  }
+
   const isApproved = customer?.metadata?.approved === true
 
   const filteredProducts = useMemo(() => {
@@ -245,7 +416,8 @@ export default function Home() {
         productMatchesEditorial(product, selectedEditorial)
 
       const matchesTag =
-        selectedTag === "Todos" || searchText.includes(normalizedTag)
+        selectedTag === "Todos" ||
+        searchText.includes(normalizedTag)
 
       return matchesSearch && matchesEditorial && matchesTag
     })
@@ -257,7 +429,9 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-neutral-50 text-slate-900">
         <div className="mx-auto max-w-7xl px-6 py-20">
-          <p className="text-sm text-slate-500">Cargando plataforma…</p>
+          <p className="text-sm text-slate-500">
+            Cargando plataforma…
+          </p>
         </div>
       </main>
     )
@@ -280,6 +454,7 @@ export default function Home() {
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Distribución B2B
               </p>
+
               <h1 className="text-xl font-bold tracking-tight">
                 Movitec Games
               </h1>
@@ -343,8 +518,11 @@ export default function Home() {
             ) : (
               <div className="text-right">
                 <p className="text-sm font-medium">{customer.email}</p>
+
                 <p className="text-xs text-slate-500">
-                  {isApproved ? "Cuenta aprobada" : "Cuenta en revisión"}
+                  {isApproved
+                    ? "Cuenta aprobada"
+                    : "Cuenta en revisión"}
                 </p>
 
                 <div className="mt-2 flex flex-wrap justify-end gap-2">
@@ -383,9 +561,10 @@ export default function Home() {
             </h2>
 
             <p className="mt-6 max-w-2xl text-lg text-slate-300">
-              Movitec Games conecta el catálogo con el mercado. Los visitantes
-              pueden explorar los títulos disponibles, y las tiendas aprobadas
-              acceden a condiciones comerciales, precios y operación B2B.
+              Movitec Games conecta el catálogo con el mercado. Los
+              visitantes pueden explorar los títulos disponibles, y las
+              tiendas aprobadas acceden a condiciones comerciales,
+              precios y operación B2B.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -428,21 +607,25 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Dos vías de acceso
               </p>
+
               <h3 className="mt-3 text-2xl font-bold tracking-tight">
                 Catálogo abierto, condiciones comerciales restringidas
               </h3>
 
               <ul className="mt-6 space-y-4 text-sm text-slate-600">
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Público general: puede explorar el catálogo y consultar los
-                  títulos disponibles.
+                  Público general: puede explorar el catálogo y consultar
+                  los títulos disponibles.
                 </li>
+
                 <li className="rounded-xl bg-slate-50 p-4">
-                  Tiendas aprobadas: pueden ingresar y acceder a precios y
-                  operación B2B.
+                  Tiendas aprobadas: pueden ingresar y acceder a precios
+                  y operación B2B.
                 </li>
+
                 <li className="rounded-xl bg-slate-50 p-4">
-                  La habilitación comercial requiere revisión documental previa.
+                  La habilitación comercial requiere revisión documental
+                  previa.
                 </li>
               </ul>
             </div>
@@ -457,15 +640,18 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Explora Movitec Games
               </p>
+
               <h2 className="mt-2 text-2xl font-bold tracking-tight">
-                Una plataforma para descubrir, comprar y distribuir juegos de
-                mesa modernos
+                Una plataforma para descubrir, comprar y distribuir
+                juegos de mesa modernos
               </h2>
+
               <p className="mt-3 max-w-4xl leading-7 text-slate-600">
                 Si eres jugador o cliente final, puedes explorar juegos,
-                editoriales, categorías y consultar dónde comprarlos. Si tienes
-                una tienda, librería, club o comercio especializado, puedes
-                solicitar acceso comercial para consultar condiciones B2B.
+                editoriales, categorías y consultar dónde comprarlos. Si
+                tienes una tienda, librería, club o comercio
+                especializado, puedes solicitar acceso comercial para
+                consultar condiciones B2B.
               </p>
             </div>
           </div>
@@ -478,12 +664,14 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Catálogo
               </p>
+
               <h3 className="mt-2 text-xl font-bold tracking-tight">
                 Ver juegos disponibles
               </h3>
+
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Explora el catálogo público de juegos de mesa modernos en
-                español.
+                Explora el catálogo público de juegos de mesa modernos
+                en español.
               </p>
             </Link>
 
@@ -494,12 +682,14 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Categorías
               </p>
+
               <h3 className="mt-2 text-xl font-bold tracking-tight">
                 Encuentra qué tipo de juego buscar
               </h3>
+
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Familiares, party, cooperativos, estrategia, cartas, infantiles
-                y más.
+                Familiares, party, cooperativos, estrategia, cartas,
+                infantiles y más.
               </p>
             </Link>
 
@@ -510,12 +700,14 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Editoriales
               </p>
+
               <h3 className="mt-2 text-xl font-bold tracking-tight">
                 Conoce los sellos del catálogo
               </h3>
+
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                2Tomatoes, SD Games, Tranjis Games, Arrakis Games, Delirium
-                Games y más.
+                2Tomatoes, SD Games, Tranjis Games, Arrakis Games,
+                Delirium Games y más.
               </p>
             </Link>
 
@@ -526,11 +718,14 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Cliente final
               </p>
+
               <h3 className="mt-2 text-xl font-bold tracking-tight">
                 Dónde comprar
               </h3>
+
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Consulta canales y puntos de venta para conseguir los juegos.
+                Consulta canales y puntos de venta para conseguir los
+                juegos.
               </p>
             </Link>
 
@@ -541,11 +736,14 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 B2B
               </p>
+
               <h3 className="mt-2 text-xl font-bold tracking-tight">
                 Distribución para tiendas
               </h3>
+
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Conoce cómo funciona Movitec Games para tiendas y comercios.
+                Conoce cómo funciona Movitec Games para tiendas y
+                comercios.
               </p>
             </Link>
 
@@ -556,12 +754,14 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Ayuda
               </p>
+
               <h3 className="mt-2 text-xl font-bold tracking-tight">
                 Preguntas frecuentes
               </h3>
+
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Resuelve dudas como cliente final o como tienda interesada en
-                acceso B2B.
+                Resuelve dudas como cliente final o como tienda
+                interesada en acceso B2B.
               </p>
             </Link>
           </div>
@@ -574,13 +774,15 @@ export default function Home() {
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">
               Cuenta en revisión
             </p>
+
             <h3 className="mt-3 text-2xl font-bold tracking-tight text-amber-900">
               Tu solicitud está siendo validada
             </h3>
+
             <p className="mt-4 max-w-3xl text-amber-900/80">
               Ya recibimos tu información. Una vez aprobemos tu perfil
-              comercial, se habilitará la visualización de precios y condiciones
-              B2B dentro de la plataforma.
+              comercial, se habilitará la visualización de precios y
+              condiciones B2B dentro de la plataforma.
             </p>
           </div>
         </section>
@@ -593,6 +795,7 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Explora por editorial
               </p>
+
               <h3 className="mt-2 text-2xl font-bold tracking-tight">
                 Catálogo organizado para encontrar más rápido
               </h3>
@@ -622,9 +825,15 @@ export default function Home() {
               }`}
             >
               <div className="flex h-16 items-center justify-center rounded-xl bg-white p-3">
-                <span className="text-sm font-bold text-slate-900">Todos</span>
+                <span className="text-sm font-bold text-slate-900">
+                  Todos
+                </span>
               </div>
-              <p className="mt-3 text-sm font-bold">Todas las editoriales</p>
+
+              <p className="mt-3 text-sm font-bold">
+                Todas las editoriales
+              </p>
+
               <p
                 className={`mt-1 text-xs ${
                   selectedEditorial === "Todos"
@@ -637,13 +846,18 @@ export default function Home() {
             </button>
 
             {EDITORIALS.map((editorial) => {
-              const count = getEditorialCount(products, editorial.name)
+              const count = getEditorialCount(
+                products,
+                editorial.name
+              )
 
               return (
                 <button
                   key={editorial.name}
                   type="button"
-                  onClick={() => setSelectedEditorial(editorial.name)}
+                  onClick={() =>
+                    setSelectedEditorial(editorial.name)
+                  }
                   className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
                     selectedEditorial === editorial.name
                       ? "border-slate-900 bg-slate-900 text-white"
@@ -657,7 +871,11 @@ export default function Home() {
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>
-                  <p className="mt-3 text-sm font-bold">{editorial.name}</p>
+
+                  <p className="mt-3 text-sm font-bold">
+                    {editorial.name}
+                  </p>
+
                   <p
                     className={`mt-1 text-xs ${
                       selectedEditorial === editorial.name
@@ -674,12 +892,16 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="catalogo" className="mx-auto max-w-7xl px-6 py-16">
+      <section
+        id="catalogo"
+        className="mx-auto max-w-7xl px-6 py-16"
+      >
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
               Catálogo
             </p>
+
             <h3 className="mt-2 text-3xl font-bold tracking-tight">
               Juegos destacados
             </h3>
@@ -696,10 +918,13 @@ export default function Home() {
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Buscar juego
               </label>
+
               <input
                 type="search"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) =>
+                  setSearchQuery(event.target.value)
+                }
                 placeholder="Buscar por nombre, editorial, tag o característica..."
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
               />
@@ -709,12 +934,18 @@ export default function Home() {
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Filtrar por característica
               </label>
+
               <select
                 value={selectedTag}
-                onChange={(event) => setSelectedTag(event.target.value)}
+                onChange={(event) =>
+                  setSelectedTag(event.target.value)
+                }
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
               >
-                <option value="Todos">Todas las características</option>
+                <option value="Todos">
+                  Todas las características
+                </option>
+
                 {QUICK_TAGS.map((tag) => (
                   <option key={tag} value={tag}>
                     {tag}
@@ -747,6 +978,7 @@ export default function Home() {
             <p className="text-lg font-semibold">
               No hay productos disponibles todavía.
             </p>
+
             <p className="mt-2 text-slate-500">
               Cuando publiques productos en Medusa, aparecerán aquí
               automáticamente.
@@ -757,6 +989,7 @@ export default function Home() {
             <p className="text-lg font-semibold">
               No encontramos juegos con ese filtro.
             </p>
+
             <p className="mt-2 text-slate-500">
               Prueba con otra palabra, editorial o característica.
             </p>
@@ -766,14 +999,20 @@ export default function Home() {
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visibleProducts.map((product) => {
                 const image =
-                  product.thumbnail || product.images?.[0]?.url || null
+                  product.thumbnail ||
+                  product.images?.[0]?.url ||
+                  null
 
                 const price =
-                  product.variants?.[0]?.calculated_price?.calculated_amount
+                  product.variants?.[0]?.calculated_price
+                    ?.calculated_amount
 
                 const currency =
                   product.variants?.[0]?.calculated_price?.currency_code?.toUpperCase() ||
                   "COP"
+
+                const stockStatus =
+                  getProductStockStatus(product)
 
                 return (
                   <article
@@ -840,7 +1079,7 @@ export default function Home() {
                         )}
                       </div>
 
-                      <div className="mt-5 flex gap-2">
+                      <div className="mt-5 flex flex-wrap gap-2">
                         <Link
                           href={`/productos/${product.handle}`}
                           className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
@@ -849,9 +1088,23 @@ export default function Home() {
                         </Link>
 
                         {customer && isApproved && (
-                          <span className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500">
-                            Aprobado
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddToCart(product)
+                            }
+                            disabled={
+                              addingProductId === product.id ||
+                              stockStatus.isSoldOut
+                            }
+                            className="inline-flex rounded-xl border border-slate-900 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {addingProductId === product.id
+                              ? "Agregando..."
+                              : stockStatus.isSoldOut
+                                ? "Agotado"
+                                : "Añadir al carrito"}
+                          </button>
                         )}
 
                         {customer && !isApproved && (
@@ -866,7 +1119,8 @@ export default function Home() {
               })}
             </div>
 
-            {filteredProducts.length > visibleProducts.length && (
+            {filteredProducts.length >
+              visibleProducts.length && (
               <div className="mt-10 flex justify-center">
                 <Link
                   href="/productos"
