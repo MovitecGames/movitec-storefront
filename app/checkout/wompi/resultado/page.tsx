@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import {
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -15,6 +16,7 @@ type ConfirmationResponse = {
   alreadyProcessed?: boolean
   already_processed?: boolean
   ignored?: boolean
+  processing?: boolean
   status?: string
   wompiStatus?: string
   wompi_status?: string
@@ -24,6 +26,8 @@ type ConfirmationResponse = {
   order_id?: string
   orderDisplayId?: string | number
   order_display_id?: string | number
+  publicOrderNumber?: string
+  public_order_number?: string
   reference?: string
   transactionId?: string
   transaction_id?: string
@@ -79,7 +83,9 @@ function isApprovedResponse(
       response.orderId ||
         response.order_id ||
         response.orderDisplayId ||
-        response.order_display_id
+        response.order_display_id ||
+        response.publicOrderNumber ||
+        response.public_order_number
     )
   )
 }
@@ -104,7 +110,7 @@ function isDeclinedStatus(status: string) {
   ].includes(status)
 }
 
-export default function WompiResultadoPage() {
+function WompiResultadoContent() {
   const searchParams = useSearchParams()
 
   const transactionId =
@@ -163,8 +169,10 @@ export default function WompiResultadoPage() {
               cache: "no-store",
               body: JSON.stringify({
                 transactionId,
-                reference: reference || undefined,
-                cartId: cartId || undefined,
+                reference:
+                  reference || undefined,
+                cartId:
+                  cartId || undefined,
               }),
             }
           )
@@ -198,7 +206,8 @@ export default function WompiResultadoPage() {
 
           if (
             isPendingStatus(wompiStatus) ||
-            payload.ignored === true
+            payload.ignored === true ||
+            payload.processing === true
           ) {
             setPageStatus("pending")
             setMessage(
@@ -206,15 +215,24 @@ export default function WompiResultadoPage() {
                 "Wompi todavía está procesando la transacción."
             )
 
-            if (currentAttempt < MAX_ATTEMPTS) {
-              await wait(RETRY_DELAY_MS)
+            if (
+              currentAttempt <
+              MAX_ATTEMPTS
+            ) {
+              await wait(
+                RETRY_DELAY_MS
+              )
               continue
             }
 
             return
           }
 
-          if (isDeclinedStatus(wompiStatus)) {
+          if (
+            isDeclinedStatus(
+              wompiStatus
+            )
+          ) {
             setPageStatus("declined")
             setMessage(
               payload.message ||
@@ -224,13 +242,17 @@ export default function WompiResultadoPage() {
             return
           }
 
-          if (!response.ok || payload.ok === false) {
+          if (
+            !response.ok ||
+            payload.ok === false
+          ) {
             /*
              * Algunos errores temporales pueden suceder mientras
              * Wompi termina de publicar la transacción.
              */
             if (
-              currentAttempt < MAX_ATTEMPTS &&
+              currentAttempt <
+                MAX_ATTEMPTS &&
               response.status >= 500
             ) {
               setPageStatus("loading")
@@ -238,7 +260,9 @@ export default function WompiResultadoPage() {
                 "Seguimos verificando tu pago. No cierres esta ventana."
               )
 
-              await wait(RETRY_DELAY_MS)
+              await wait(
+                RETRY_DELAY_MS
+              )
               continue
             }
 
@@ -255,13 +279,18 @@ export default function WompiResultadoPage() {
            * Si la respuesta es válida pero no tiene todavía
            * un estado definitivo, se intenta nuevamente.
            */
-          if (currentAttempt < MAX_ATTEMPTS) {
+          if (
+            currentAttempt <
+            MAX_ATTEMPTS
+          ) {
             setPageStatus("pending")
             setMessage(
               "El pago está siendo confirmado. Espera unos segundos."
             )
 
-            await wait(RETRY_DELAY_MS)
+            await wait(
+              RETRY_DELAY_MS
+            )
             continue
           }
 
@@ -276,13 +305,18 @@ export default function WompiResultadoPage() {
             error
           )
 
-          if (currentAttempt < MAX_ATTEMPTS) {
+          if (
+            currentAttempt <
+            MAX_ATTEMPTS
+          ) {
             setPageStatus("loading")
             setMessage(
               "Estamos intentando confirmar nuevamente tu pago."
             )
 
-            await wait(RETRY_DELAY_MS)
+            await wait(
+              RETRY_DELAY_MS
+            )
             continue
           }
 
@@ -295,14 +329,22 @@ export default function WompiResultadoPage() {
           return
         }
       }
-    }, [cartId, reference, transactionId])
+    }, [
+      cartId,
+      reference,
+      transactionId,
+    ])
 
   useEffect(() => {
-    if (confirmationStarted.current) {
+    if (
+      confirmationStarted.current
+    ) {
       return
     }
 
-    confirmationStarted.current = true
+    confirmationStarted.current =
+      true
+
     void confirmTransaction()
   }, [confirmTransaction])
 
@@ -310,20 +352,46 @@ export default function WompiResultadoPage() {
     result?.orderDisplayId ||
     result?.order_display_id
 
+  const publicOrderNumber =
+    normalizeText(
+      result?.publicOrderNumber
+    ) ||
+    normalizeText(
+      result?.public_order_number
+    ) ||
+    (orderDisplayId
+      ? `MV-${String(
+          orderDisplayId
+        )}`
+      : "")
+
   const confirmedReference =
-    normalizeText(result?.reference) ||
+    normalizeText(
+      result?.reference
+    ) ||
     normalizeText(reference)
 
   const confirmedTransactionId =
-    normalizeText(result?.transactionId) ||
-    normalizeText(result?.transaction_id) ||
+    normalizeText(
+      result?.transactionId
+    ) ||
+    normalizeText(
+      result?.transaction_id
+    ) ||
     normalizeText(transactionId)
 
-  const warnings = Array.isArray(result?.warnings)
+  const warnings = Array.isArray(
+    result?.warnings
+  )
     ? result.warnings.filter(
-        (warning): warning is string =>
-          typeof warning === "string" &&
-          Boolean(warning.trim())
+        (
+          warning
+        ): warning is string =>
+          typeof warning ===
+            "string" &&
+          Boolean(
+            warning.trim()
+          )
       )
     : []
 
@@ -337,51 +405,61 @@ export default function WompiResultadoPage() {
             </p>
 
             <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">
-              {pageStatus === "loading" &&
+              {pageStatus ===
+                "loading" &&
                 "Confirmando tu transacción"}
 
-              {pageStatus === "approved" &&
+              {pageStatus ===
+                "approved" &&
                 "Pedido confirmado"}
 
-              {pageStatus === "pending" &&
+              {pageStatus ===
+                "pending" &&
                 "Pago en proceso"}
 
-              {pageStatus === "declined" &&
+              {pageStatus ===
+                "declined" &&
                 "Pago no aprobado"}
 
-              {pageStatus === "error" &&
+              {pageStatus ===
+                "error" &&
                 "No pudimos confirmar el pedido"}
             </h1>
           </div>
 
           <div className="px-6 py-8 sm:px-8">
             <div className="flex flex-col items-center text-center">
-              {pageStatus === "loading" && (
+              {pageStatus ===
+                "loading" && (
                 <div
                   className="mb-6 h-14 w-14 animate-spin rounded-full border-4 border-neutral-200 border-t-neutral-900"
                   aria-label="Confirmando pago"
                 />
               )}
 
-              {pageStatus === "approved" && (
+              {pageStatus ===
+                "approved" && (
                 <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-700">
                   ✓
                 </div>
               )}
 
-              {pageStatus === "pending" && (
+              {pageStatus ===
+                "pending" && (
                 <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-3xl text-amber-700">
                   …
                 </div>
               )}
 
-              {pageStatus === "declined" && (
+              {pageStatus ===
+                "declined" && (
                 <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-3xl text-red-700">
                   ×
                 </div>
               )}
 
-              {pageStatus === "error" && (
+              {pageStatus ===
+                "error" && (
                 <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-3xl text-red-700">
                   !
                 </div>
@@ -391,38 +469,47 @@ export default function WompiResultadoPage() {
                 {message}
               </p>
 
-              {pageStatus === "loading" && (
+              {pageStatus ===
+                "loading" && (
                 <p className="mt-3 text-sm text-neutral-500">
-                  Verificación {attempt} de{" "}
+                  Verificación{" "}
+                  {attempt} de{" "}
                   {MAX_ATTEMPTS}
                 </p>
               )}
 
-              {pageStatus === "pending" &&
-                attempt < MAX_ATTEMPTS && (
+              {pageStatus ===
+                "pending" &&
+                attempt <
+                  MAX_ATTEMPTS && (
                   <p className="mt-3 text-sm text-neutral-500">
-                    Verificación {attempt} de{" "}
+                    Verificación{" "}
+                    {attempt} de{" "}
                     {MAX_ATTEMPTS}
                   </p>
                 )}
             </div>
 
-            {(orderDisplayId ||
+            {(publicOrderNumber ||
               confirmedReference ||
               confirmedTransactionId) && (
               <div className="mt-8 rounded-xl bg-neutral-50 p-5">
                 <h2 className="mb-4 font-semibold text-neutral-900">
-                  Información de la transacción
+                  Información de la
+                  transacción
                 </h2>
 
                 <dl className="space-y-3 text-sm">
-                  {orderDisplayId && (
+                  {publicOrderNumber && (
                     <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
                       <dt className="text-neutral-500">
                         Número de pedido
                       </dt>
+
                       <dd className="font-semibold text-neutral-900">
-                        #{String(orderDisplayId)}
+                        {
+                          publicOrderNumber
+                        }
                       </dd>
                     </div>
                   )}
@@ -432,8 +519,11 @@ export default function WompiResultadoPage() {
                       <dt className="text-neutral-500">
                         Referencia
                       </dt>
+
                       <dd className="break-all font-medium text-neutral-900">
-                        {confirmedReference}
+                        {
+                          confirmedReference
+                        }
                       </dd>
                     </div>
                   )}
@@ -441,10 +531,14 @@ export default function WompiResultadoPage() {
                   {confirmedTransactionId && (
                     <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
                       <dt className="text-neutral-500">
-                        Transacción Wompi
+                        Transacción
+                        Wompi
                       </dt>
+
                       <dd className="break-all font-medium text-neutral-900">
-                        {confirmedTransactionId}
+                        {
+                          confirmedTransactionId
+                        }
                       </dd>
                     </div>
                   )}
@@ -455,20 +549,30 @@ export default function WompiResultadoPage() {
             {warnings.length > 0 && (
               <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
                 <h2 className="font-semibold text-amber-900">
-                  El pedido fue procesado con observaciones
+                  El pedido fue
+                  procesado con
+                  observaciones
                 </h2>
 
                 <div className="mt-3 space-y-2 text-sm text-amber-800">
-                  {warnings.map((warning, index) => (
-                    <p key={`${warning}-${index}`}>
-                      {warning}
-                    </p>
-                  ))}
+                  {warnings.map(
+                    (
+                      warning,
+                      index
+                    ) => (
+                      <p
+                        key={`${warning}-${index}`}
+                      >
+                        {warning}
+                      </p>
+                    )
+                  )}
                 </div>
               </div>
             )}
 
-            {pageStatus === "approved" && (
+            {pageStatus ===
+              "approved" && (
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Link
                   href="/cuenta/pedidos"
@@ -486,7 +590,8 @@ export default function WompiResultadoPage() {
               </div>
             )}
 
-            {pageStatus === "pending" && (
+            {pageStatus ===
+              "pending" && (
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <button
                   type="button"
@@ -507,8 +612,10 @@ export default function WompiResultadoPage() {
               </div>
             )}
 
-            {(pageStatus === "declined" ||
-              pageStatus === "error") && (
+            {(pageStatus ===
+              "declined" ||
+              pageStatus ===
+                "error") && (
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Link
                   href="/checkout"
@@ -529,11 +636,61 @@ export default function WompiResultadoPage() {
         </section>
 
         <p className="mt-5 text-center text-sm leading-6 text-neutral-500">
-          No realices un segundo pago mientras esta
-          transacción aparezca en proceso. La confirmación
-          también se recibe automáticamente desde Wompi.
+          No realices un segundo pago
+          mientras esta transacción
+          aparezca en proceso. La
+          confirmación también se
+          recibe automáticamente desde
+          Wompi.
         </p>
       </div>
     </main>
+  )
+}
+
+function WompiResultadoLoading() {
+  return (
+    <main className="min-h-[70vh] bg-neutral-50 px-4 py-12">
+      <div className="mx-auto max-w-2xl">
+        <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+          <div className="border-b border-neutral-200 px-6 py-6 sm:px-8">
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+              Resultado del pago
+            </p>
+
+            <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">
+              Confirmando tu transacción
+            </h1>
+          </div>
+
+          <div className="px-6 py-8 sm:px-8">
+            <div className="flex flex-col items-center text-center">
+              <div
+                className="mb-6 h-14 w-14 animate-spin rounded-full border-4 border-neutral-200 border-t-neutral-900"
+                aria-label="Cargando resultado del pago"
+              />
+
+              <p className="max-w-lg text-base leading-7 text-neutral-700">
+                Estamos preparando la
+                confirmación de tu
+                pago.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  )
+}
+
+export default function WompiResultadoPage() {
+  return (
+    <Suspense
+      fallback={
+        <WompiResultadoLoading />
+      }
+    >
+      <WompiResultadoContent />
+    </Suspense>
   )
 }
