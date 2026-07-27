@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import Medusa from "@medusajs/js-sdk"
 import { createHash } from "crypto"
+import { supabaseAdmin } from "../../../../lib/supabase-admin"
 
 const medusa = new Medusa({
   baseUrl: process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL!,
@@ -60,6 +61,121 @@ function buildIntegritySignature(params: {
   return createHash("sha256").update(raw).digest("hex")
 }
 
+async function savePaymentIntent(params: {
+  reference: string
+  cartId: string
+  amountInCents: number
+  currency: string
+  customerEmail: string
+  rawJson: Record<string, any>
+}) {
+  const { data: existingIntent, error: lookupError } = await supabaseAdmin
+    .from("b2b_wompi_payment_intents")
+    .select("*")
+    .eq("reference", params.reference)
+    .maybeSingle()
+
+  if (lookupError) {
+    throw new Error(
+      `No fue posible consultar el intento de pago Wompi. ${lookupError.message}`
+    )
+  }
+
+  if (existingIntent) {
+    const existingCartId = normalizeWhitespace(existingIntent.cart_id)
+    const existingCurrency = String(existingIntent.currency || "").toUpperCase()
+    const existingAmountInCents = Number(existingIntent.amount_in_cents || 0)
+
+    if (existingCartId && existingCartId !== params.cartId) {
+      throw new Error(
+        "La referencia Wompi ya está asociada a otro carrito. No se puede continuar con el pago."
+      )
+    }
+
+    if (
+      existingAmountInCents > 0 &&
+      existingAmountInCents !== params.amountInCents
+    ) {
+      throw new Error(
+        "La referencia Wompi ya existe con un valor diferente. Actualiza el checkout e intenta nuevamente."
+      )
+    }
+
+    if (
+      existingCurrency &&
+      existingCurrency !== params.currency.toUpperCase()
+    ) {
+      throw new Error(
+        "La referencia Wompi ya existe con una moneda diferente."
+      )
+    }
+
+    if (
+      existingIntent.order_id ||
+      String(existingIntent.status || "").toLowerCase() === "processed"
+    ) {
+      throw new Error(
+        "Esta referencia Wompi ya fue procesada y tiene una orden asociada."
+      )
+    }
+
+    const previousRawJson =
+      existingIntent.raw_json &&
+      typeof existingIntent.raw_json === "object" &&
+      !Array.isArray(existingIntent.raw_json)
+        ? existingIntent.raw_json
+        : {}
+
+    const { error: updateError } = await supabaseAdmin
+      .from("b2b_wompi_payment_intents")
+      .update({
+        cart_id: params.cartId,
+        amount_in_cents: params.amountInCents,
+        currency: params.currency.toUpperCase(),
+        status: "pending",
+        commercial_payment_status: "pending",
+        customer_email: params.customerEmail,
+        last_error: null,
+        raw_json: {
+          ...previousRawJson,
+          ...params.rawJson,
+          payment_intent_last_prepared_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", existingIntent.id)
+
+    if (updateError) {
+      throw new Error(
+        `No fue posible actualizar el intento de pago Wompi. ${updateError.message}`
+      )
+    }
+
+    return
+  }
+
+  const { error: insertError } = await supabaseAdmin
+    .from("b2b_wompi_payment_intents")
+    .insert({
+      reference: params.reference,
+      cart_id: params.cartId,
+      amount_in_cents: params.amountInCents,
+      currency: params.currency.toUpperCase(),
+      status: "pending",
+      commercial_payment_status: "pending",
+      customer_email: params.customerEmail,
+      raw_json: {
+        ...params.rawJson,
+        payment_intent_created_at: new Date().toISOString(),
+      },
+    })
+
+  if (insertError) {
+    throw new Error(
+      `No fue posible guardar el intento de pago Wompi. ${insertError.message}`
+    )
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
@@ -78,8 +194,7 @@ export async function POST(req: Request) {
     }
 
     const wompiPublicKey = process.env.WOMPI_PUBLIC_KEY || ""
-    const wompiIntegritySecret =
-      process.env.WOMPI_INTEGRITY_SECRET || ""
+    const wompiIntegritySecret = process.env.WOMPI_INTEGRITY_SECRET || ""
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || ""
 
     if (!wompiPublicKey || !wompiIntegritySecret || !baseUrl) {
@@ -102,9 +217,7 @@ export async function POST(req: Request) {
 
     const metadata = (cart as any)?.metadata || {}
 
-    const paymentMethod = String(
-      metadata.payment_method || ""
-    )
+    const paymentMethod = String(metadata.payment_method || "")
       .trim()
       .toLowerCase()
 
@@ -121,16 +234,13 @@ export async function POST(req: Request) {
       )
     }
 
-    const currency = String(
-      cart?.currency_code || "COP"
-    ).toUpperCase()
+    const currency = String(cart?.currency_code || "COP").toUpperCase()
 
     if (currency !== "COP") {
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "La integración actual de Wompi quedó preparada para COP.",
+          error: "La integración actual de Wompi quedó preparada para COP.",
         },
         {
           status: 400,
@@ -157,9 +267,7 @@ export async function POST(req: Request) {
     )
 
     const icaValue = getNumber(
-      metadata.checkout_ica_value ??
-        metadata.ica_value ??
-        0
+      metadata.checkout_ica_value ?? metadata.ica_value ?? 0
     )
 
     const paymentFee = getNumber(
@@ -198,10 +306,14 @@ export async function POST(req: Request) {
       cartId
     )
 
+    const customerEmail = normalizeWhitespace(cart?.email)
+
     const redirectUrl = `${baseUrl.replace(
       /\/$/,
       ""
-    )}/checkout/wompi/resultado`
+    )}/checkout/wompi/resultado?reference=${encodeURIComponent(
+      reference
+    )}&cart_id=${encodeURIComponent(cartId)}`
 
     const integritySignature = buildIntegritySignature({
       reference,
@@ -211,6 +323,36 @@ export async function POST(req: Request) {
     })
 
     const shippingAddress = cart?.shipping_address || {}
+
+    await savePaymentIntent({
+      reference,
+      cartId,
+      amountInCents,
+      currency,
+      customerEmail,
+      rawJson: {
+        source: "b2b_start_wompi_payment",
+        payment_method: paymentMethod,
+        checkout_order_number: normalizeWhitespace(
+          metadata.checkout_order_number
+        ),
+        commercial_summary: {
+          total_with_commercial_terms: totalWithCommercialTerms,
+          shipping_cost: shippingCost,
+          retefuente_value: retefuenteValue,
+          ica_value: icaValue,
+          payment_fee: paymentFee,
+          final_total: finalTotal,
+        },
+        delivery: {
+          mode: normalizeWhitespace(metadata.delivery_mode),
+          selected_shipping_label: normalizeWhitespace(
+            metadata.selected_shipping_label
+          ),
+          selected_shipping_price: shippingCost,
+        },
+      },
+    })
 
     return NextResponse.json({
       ok: true,
@@ -224,30 +366,22 @@ export async function POST(req: Request) {
         },
         redirect_url: redirectUrl,
         customer_data: {
-          email: normalizeWhitespace(cart?.email),
+          email: customerEmail,
           full_name: normalizeWhitespace(
             `${shippingAddress.first_name || ""} ${
               shippingAddress.last_name || ""
             }`
           ),
-          phone_number: normalizeWhitespace(
-            shippingAddress.phone
-          ),
+          phone_number: normalizeWhitespace(shippingAddress.phone),
         },
         shipping_address: {
-          address_line_1: normalizeWhitespace(
-            shippingAddress.address_1
-          ),
+          address_line_1: normalizeWhitespace(shippingAddress.address_1),
           country: String(
             shippingAddress.country_code || "CO"
           ).toUpperCase(),
           city: normalizeWhitespace(shippingAddress.city),
-          region: normalizeWhitespace(
-            shippingAddress.province
-          ),
-          phone_number: normalizeWhitespace(
-            shippingAddress.phone
-          ),
+          region: normalizeWhitespace(shippingAddress.province),
+          phone_number: normalizeWhitespace(shippingAddress.phone),
           name: normalizeWhitespace(
             `${shippingAddress.first_name || ""} ${
               shippingAddress.last_name || ""
@@ -259,8 +393,7 @@ export async function POST(req: Request) {
         },
       },
       commercial_summary: {
-        total_with_commercial_terms:
-          totalWithCommercialTerms,
+        total_with_commercial_terms: totalWithCommercialTerms,
         shipping_cost: shippingCost,
         retefuente_value: retefuenteValue,
         ica_value: icaValue,
