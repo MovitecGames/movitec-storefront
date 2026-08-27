@@ -177,6 +177,27 @@ async function savePaymentIntent(params: {
 }
 
 export async function POST(req: Request) {
+  const maintenanceMode =
+    String(process.env.CHECKOUT_MAINTENANCE_MODE || "")
+      .trim()
+      .toLowerCase() === "true"
+
+  if (maintenanceMode) {
+    return NextResponse.json(
+      {
+        ok: false,
+        maintenance: true,
+        error: "El inicio de nuevos pagos está temporalmente suspendido mientras verificamos el inventario.",
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    )
+  }
+
   try {
     const body = await req.json().catch(() => null)
     const cartId = normalizeWhitespace(body?.cartId)

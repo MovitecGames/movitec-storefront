@@ -280,6 +280,27 @@ async function saveOrderSnapshot(snapshot: {
 }
 
 export async function POST(req: Request) {
+  const maintenanceMode =
+    String(process.env.CHECKOUT_MAINTENANCE_MODE || "")
+      .trim()
+      .toLowerCase() === "true"
+
+  if (maintenanceMode) {
+    return NextResponse.json(
+      {
+        ok: false,
+        maintenance: true,
+        error: "La confirmación de nuevos pedidos está temporalmente suspendida mientras verificamos el inventario.",
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    )
+  }
+
   try {
     const body = await req.json().catch(() => null)
     const cartId = String(body?.cartId || "").trim()

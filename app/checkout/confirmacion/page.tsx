@@ -4,7 +4,10 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { medusa } from "../../../lib/medusa"
 import { retrieveCart, transferCart } from "../../../lib/medusa-cart"
-import { getStoredCartId } from "../../../lib/cart-storage"
+import {
+  clearStoredCheckoutState,
+  getStoredCartId,
+} from "../../../lib/cart-storage"
 
 type CartLineItem = {
   id: string
@@ -209,7 +212,7 @@ export default function CheckoutConfirmationPage() {
 
       if (typeof window !== "undefined") {
         sessionStorage.setItem("last_confirmed_order", JSON.stringify(data.order))
-        localStorage.removeItem("medusa_cart_id")
+        clearStoredCheckoutState()
       }
 
       setConfirmedOrder(data.order as ConfirmedOrder)
